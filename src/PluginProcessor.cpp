@@ -161,6 +161,63 @@ namespace irene
         std::swap (slotListContexts[static_cast<size_t> (slotA)], slotListContexts[static_cast<size_t> (slotB)]);
     }
 
+    align::Result IReneProcessor::alignSlots (int referenceSlot)
+    {
+        const auto rate = slotManager.getEngineSampleRate();
+
+        if (rate <= 0.0)
+        {
+            align::Result notReady;
+            notReady.message = "The audio engine isn't running yet. Start playback once (or wait until the DAW has activated the plugin) and try again.";
+            return notReady;
+        }
+
+        // The IRs exactly as the slots play them: resampled, trimmed, auto-trimmed.
+        std::array<align::SlotInput, kNumSlots> inputs;
+        const auto settings = paramRefs.read();
+
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            const auto index = static_cast<size_t> (i);
+            inputs[index].ir = slotManager.getPreparedIR (i);
+            inputs[index].phaseInvert = settings.slots[index].phaseInvert;
+            inputs[index].name = slotManager.getInfo (i).reference.name;
+        }
+
+        const auto result = align::computeAlignment (inputs, rate, referenceSlot);
+
+        if (! result.ok)
+            return result;
+
+        const auto setParam = [this] (const juce::String& id, float realValue)
+        {
+            if (auto* param = apvts.getParameter (id))
+            {
+                const auto normalised = param->convertTo0to1 (realValue);
+
+                if (! juce::approximatelyEqual (param->getValue(), normalised))
+                {
+                    param->beginChangeGesture();
+                    param->setValueNotifyingHost (normalised);
+                    param->endChangeGesture();
+                }
+            }
+        };
+
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            const auto& slot = result.slots[static_cast<size_t> (i)];
+
+            if (! slot.aligned)
+                continue; // empty slots, and slots too different from the reference, keep their settings
+
+            setParam (ids::slotParam (i, ids::delay), static_cast<float> (slot.delayMs));
+            setParam (ids::slotParam (i, ids::phase), slot.phaseInvert ? 1.0f : 0.0f);
+        }
+
+        return result;
+    }
+
     void IReneProcessor::setSlotListContext (int slot, const juce::StringArray& paths)
     {
         slotListContexts[static_cast<size_t> (slot)] = paths;

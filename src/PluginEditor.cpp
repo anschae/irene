@@ -128,6 +128,7 @@ namespace irene
             strip->onSelected = [this, i] { selectTargetSlot (i); };
             strip->onStep = [this, i] (int direction) { stepSlot (i, direction); };
             strip->onToggleFavourite = [this, i] { toggleSlotFavourite (i); };
+            strip->onAlign = [this, i] { alignToSlot (i); };
         }
 
         content.browser.onFileChosen = [this] (const juce::File& file, const juce::StringArray& list)
@@ -277,6 +278,14 @@ namespace irene
 
         if (slot == plugin.uiState.targetSlot.load())
             content.browser.showAsCurrent (file.getFullPathName());
+    }
+
+    void IReneEditor::alignToSlot (int slot)
+    {
+        const auto result = plugin.alignSlots (slot);
+
+        content.confirm.inform (result.ok ? "Aligned to Slot " + juce::String (slot + 1) : juce::String ("Nothing was changed"),
+                                result.message);
     }
 
     void IReneEditor::toggleSlotFavourite (int slot)

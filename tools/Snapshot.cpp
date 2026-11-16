@@ -159,6 +159,19 @@ int main (int argc, char* argv[])
         }
     }
 
+    if (auto* alignButton = findButton (*editor, "Align"))
+    {
+        alignButton->triggerClick();
+        pumpMessages (150);
+        ok = save (*editor, out.getChildFile ("align.png")) && ok;
+
+        if (auto* okButton = findButton (*editor, "OK"))
+        {
+            okButton->triggerClick();
+            pumpMessages (100);
+        }
+    }
+
     if (auto* exportButton = findButton (*editor, "Export IR..."))
     {
         exportButton->triggerClick();

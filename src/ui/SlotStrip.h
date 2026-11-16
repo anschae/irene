@@ -24,6 +24,7 @@ namespace irene::ui
         std::function<void()> onSelected;                     // strip clicked
         std::function<void (int direction)> onStep;           // prev/next IR (-1 / +1)
         std::function<void()> onToggleFavourite;
+        std::function<void()> onAlign;                        // "Align" clicked
 
         void setSelected (bool shouldBeSelected);
         void setFavourite (bool isFavourite);
@@ -65,7 +66,7 @@ namespace irene::ui
         juce::Label title, name, info, notice, delayReadout;
         juce::TextButton favouriteButton { juce::String::fromUTF8 ("\xe2\x98\x85") }, prevButton { "<" }, nextButton { ">" };
         juce::TextButton loadButton { "Load..." }, clearButton { "Clear" }, swapButton { "Swap" };
-        juce::TextButton normaliseButton { "Norm" }, autoTrimButton { "Trim" };
+        juce::TextButton normaliseButton { "Norm" }, autoTrimButton { "Trim" }, alignButton { "Align" };
         Knob gain { "GAIN" }, pan { "PAN" }, delay { "DELAY" }, length { "LENGTH" };
         ParamToggle phase { juce::String::fromUTF8 ("\xc3\x98"), colours::accent };
         ParamToggle mute { "M", colours::mute };

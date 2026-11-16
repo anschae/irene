@@ -88,6 +88,7 @@ namespace irene
         void loadFromList (int slot, const juce::File& file);
         void stepSlot (int slot, int direction);
         void toggleSlotFavourite (int slot);
+        void alignToSlot (int slot);
         void refreshStrips();
 
         IReneProcessor& plugin;

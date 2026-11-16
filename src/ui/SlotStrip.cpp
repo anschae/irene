@@ -37,8 +37,12 @@ namespace irene::ui
         addAndMakeVisible (notice);
         addAndMakeVisible (delayReadout);
 
-        for (auto* b : { &favouriteButton, &prevButton, &nextButton, &loadButton, &clearButton, &swapButton, &normaliseButton, &autoTrimButton })
+        for (auto* b : { &favouriteButton, &prevButton, &nextButton, &loadButton, &clearButton, &swapButton, &normaliseButton, &autoTrimButton, &alignButton })
             addAndMakeVisible (b);
+
+        alignButton.setTooltip ("Time-align the other slots to this one: sets the Delay of every loaded slot (and flips polarity where needed) "
+                                "so that all microphones arrive together.");
+        alignButton.onClick = [this] { if (onAlign) onAlign(); };
 
         favouriteButton.setTooltip ("Mark the loaded IR as a favourite");
         favouriteButton.setColour (juce::TextButton::buttonOnColourId, colours::solo);
@@ -202,6 +206,7 @@ namespace irene::ui
         favouriteButton.setEnabled (hasIR);
         normaliseButton.setEnabled (hasIR);
         autoTrimButton.setEnabled (hasIR);
+        alignButton.setEnabled (hasIR);
         normaliseButton.setToggleState (hasIR && i.normalise, juce::dontSendNotification);
         autoTrimButton.setToggleState (hasIR && i.autoTrim, juce::dontSendNotification);
 
@@ -351,12 +356,14 @@ namespace irene::ui
         area.removeFromTop (8);
 
         auto bottom = area.removeFromBottom (26);
-        const auto toggleWidth = (bottom.getWidth() - 2 * gap) / 3;
+        const auto toggleWidth = (bottom.getWidth() - 3 * gap) / 4;
         phase.setBounds (bottom.removeFromLeft (toggleWidth));
         bottom.removeFromLeft (gap);
         mute.setBounds (bottom.removeFromLeft (toggleWidth));
         bottom.removeFromLeft (gap);
-        solo.setBounds (bottom);
+        solo.setBounds (bottom.removeFromLeft (toggleWidth));
+        bottom.removeFromLeft (gap);
+        alignButton.setBounds (bottom);
 
         area.removeFromBottom (6);
         auto readoutRow = area.removeFromBottom (13);

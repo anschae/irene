@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "Config.h"
+#include "analysis/TimeAlign.h"
 #include "app/GlobalSettings.h"
 #include "app/PresetManager.h"
 #include "dsp/Engine.h"
@@ -57,6 +58,12 @@ namespace irene
 
         /** Exchanges the IR and every setting of two slots. Message thread. */
         void swapSlots (int slotA, int slotB);
+
+        /** Time-aligns all loaded slots to the given slot: sets their Delay
+            parameters (and polarity where needed) so that their direct sound
+            arrives together. Returns what was done; if `ok` is false nothing was
+            changed and `message` says why. Message thread. */
+        align::Result alignSlots (int referenceSlot);
 
         /** The complete state as a tree (parameters + slots).
             @param embedAudio  include the IR audio, making the state self-contained */

@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: version 0.1.0.** All features are implemented. The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. The plugin has not yet been tried by a person in Cubase or Logic (see [Known gaps](#known-gaps)).
+> **Status: version 0.1.0 plus automatic time-alignment.** All features are implemented. The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. The plugin has not yet been tried by a person in Cubase or Logic (see [Known gaps](#known-gaps)).
 
 ## Download
 
@@ -71,6 +71,7 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 6. **Frequency response display**: combined wet-path response, per-slot curves, channel and smoothing options ← *done* (draggable EQ handles on the display, a stretch goal, are not implemented)
 7. **Export as single IR**, with the equivalence test ← *done*
 8. **Polish**: tooltips, README, thread-safety hardening, release `v0.1.0` ← *done*
+9. **Automatic time-alignment of slots** (added after 0.1.0) ← *done*
 
 ## Design decisions
 
@@ -107,6 +108,18 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 - **Prev/next on a slot** steps through the browser list the IR was picked from. For an IR loaded another way (file dialog, drag from the desktop), it steps through the other IR files in the same folder. Both wrap around.
 - **Scanning** runs on a background thread at low priority. Files whose size and modification time are unchanged are not opened again. Unreadable `.wav`/`.aiff` files are remembered and hidden.
 - **Future-proof file format:** the library file has a version number, and attributes that this version doesn't know (such as tags or ratings written by a later version) are kept when the file is saved.
+
+### Automatic time-alignment (the Align button)
+
+- **What it does:** click **Align** on a slot and every other loaded slot is lined up with it. IRene compares the IRs by cross-correlation, sets the **Delay** of each slot so that all of them arrive together, and flips a slot's polarity (Ø) where that matches the reference better. A dialog lists what was set.
+- **Delays are only ever added.** The slot whose sound arrives last gets 0 ms and the others are delayed to meet it, so the result is the same whichever slot you click. The slot you click decides only the polarity: it keeps its own, and the others follow it.
+- **It replaces the Delay values** of the slots it aligns, including any you set by hand.
+- **Precision:** offsets are found to a fraction of a sample and set in steps of 0.001 ms. In the unit test, three copies of one IR at different distances (one with flipped polarity) sum to within about −69 dB of the ideal after Align.
+- **Based on the IRs as played:** after resampling, auto-trim and the length setting, but before the slot's filter block. Only the first 0.5 seconds of each IR are compared.
+- **Unrelated IRs are left alone.** If a slot's IR has less than a 20 % match with the reference (for example a different cabinet), its delay and polarity are not changed, because any offset would be a guess. The dialog says so. This threshold is a judgement that has not yet been checked against real multi-mic IR packs.
+- **A polarity flip needs a clear win:** the flipped fit has to be at least 10 % stronger than the best non-flipped one.
+- **Limits:** slots more than 10 ms apart can't be aligned (the Delay control's range); nothing is changed then. Align needs the audio engine to have been started once by the DAW.
+- **Parameter changes are reported to the host** like knob movements, so the DAW's own undo can take them back where the host supports that.
 
 ### Frequency display
 
@@ -163,6 +176,7 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 ## Known gaps
 
 - **Not yet tried in Cubase or Logic.** The automated checks (unit tests on all three platforms, pluginval at strictness 10, auval) pass, but nobody has used the plugin in a DAW yet. In particular, keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host.
+- **Time-alignment has only been tested with synthetic IRs.** The maths is verified, but how well it judges real microphones (the 20 % match threshold in particular) needs trying with real multi-mic IR packs.
 - **Draggable EQ handles on the display** (a stretch goal) are not implemented.
 - **CPU:** the engine always processes in stereo, also for a mono source with mono IRs.
 
