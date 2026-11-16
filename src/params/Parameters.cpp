@@ -38,16 +38,33 @@ namespace irene
                 Attributes().withStringFromValueFunction (freqToText).withValueFromStringFunction (textToFreq));
         }
 
+        /** A linear dB range that snaps to 0.01 dB by rounding the value itself.
+
+            (juce::NormalisableRange's own "interval" snaps relative to the range
+            start, e.g. -60 + 0.01 * 6000, which is not exactly 0 in float
+            arithmetic on every CPU. Rounding the value keeps 0 dB exactly 0 dB,
+            so a neutral setting really is bit-transparent everywhere.) */
+        juce::NormalisableRange<float> dbRange (float lo, float hi)
+        {
+            return { lo, hi,
+                     [] (float start, float end, float t) { return start + (end - start) * t; },
+                     [] (float start, float end, float v) { return (v - start) / (end - start); },
+                     [] (float start, float end, float v) { return juce::jlimit (start, end, std::round (v * 100.0f) / 100.0f + 0.0f); } };
+        }
+
         std::unique_ptr<juce::AudioParameterFloat> makeDb (const juce::String& id, const juce::String& name,
                                                            float lo, float hi, float def, bool lowestIsOff = false)
         {
             return std::make_unique<juce::AudioParameterFloat> (
-                pid (id), name, juce::NormalisableRange<float> (lo, hi, 0.01f), def,
+                pid (id), name, dbRange (lo, hi), def,
                 Attributes()
                     .withStringFromValueFunction ([lo, lowestIsOff] (float v, int)
                     {
                         if (lowestIsOff && v <= lo + 0.005f)
                             return juce::String ("Off");
+
+                        if (std::abs (v) < 0.05f) // never "-0.0 dB"
+                            return juce::String ("0.0 dB");
 
                         return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB";
                     })

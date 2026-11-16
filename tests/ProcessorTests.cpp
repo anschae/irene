@@ -135,6 +135,8 @@ namespace
                 // Defaults: fully wet, everything neutral
                 expectEquals (getParam (processor, "mix"), 100.0f);
                 expectEquals (getParam (processor, "slot1_gain"), 0.0f);
+                expectEquals (getParam (processor, "out_gain"), 0.0f);    // exactly 0 dB on every CPU,
+                expectEquals (getParam (processor, "in_low_gain"), 0.0f); // so that neutral means bit-transparent
                 expectEquals (getParam (processor, "slot2_length"), 100.0f);
                 expectEquals (getParam (processor, "in_hp_on"), 0.0f);
                 expectEquals (getParam (processor, "out_mid_freq"), 1000.0f);
