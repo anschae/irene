@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: version 0.1.0, feature complete, not yet released.** All features are implemented and tested on Linux. The macOS and Windows builds have not run yet, and the plugin has not been tried in Cubase or Logic (see [Known gaps](#known-gaps)). The release tag `v0.1.0` will be set once CI is green.
+> **Status: version 0.1.0.** All features are implemented. The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. The plugin has not yet been tried by a person in Cubase or Logic (see [Known gaps](#known-gaps)).
 
 ## Download
 
@@ -61,7 +61,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 5. **Presets**: save, save as, rename, delete, prev/next, Init, portable presets, missing-file handling ← *done*
 6. **Frequency response display**: combined wet-path response, per-slot curves, channel and smoothing options ← *done* (draggable EQ handles on the display, a stretch goal, are not implemented)
 7. **Export as single IR**, with the equivalence test ← *done*
-8. **Polish**: tooltips, README, thread-safety hardening ← *done*. Release tag `v0.1.0` ← *waiting for a green CI run*
+8. **Polish**: tooltips, README, thread-safety hardening, release `v0.1.0` ← *done*
 
 ## Design decisions
 
@@ -71,6 +71,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Number of IR slots:** the constant `kNumSlots` in `src/Config.h`.
 - **CI runners are pinned** to known toolchains (`macos-15`, `windows-2022`, `ubuntu-24.04`) rather than `*-latest`, so a runner update can't break the build unannounced.
 - **pluginval strictness is 10** (the maximum), above the required 5.
+- **dB parameters snap by rounding the value** to 0.01 dB rather than using JUCE's range interval, so that 0 dB is exactly 0 dB on every CPU (on Apple Silicon the interval method gave −0.0000013 dB as the default).
 - **Validation on Linux too:** the Linux job builds the VST3 and runs pluginval without GUI tests, as a fast extra check. No Linux binaries are published.
 - **macOS builds are ad-hoc signed, not notarised**, hence the quarantine step above.
 
@@ -152,8 +153,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 
 ## Known gaps
 
-- **Not yet built on macOS or Windows.** Everything so far was compiled and tested on Linux only (unit tests, and pluginval at strictness 10 including its editor tests). The GitHub Actions workflow for macOS (universal VST3/AU/Standalone, signing, pluginval, auval) and Windows (VST3/Standalone, pluginval) is written but has never run.
-- **Not yet tried in Cubase or Logic.** In particular, keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host.
+- **Not yet tried in Cubase or Logic.** The automated checks (unit tests on all three platforms, pluginval at strictness 10, auval) pass, but nobody has used the plugin in a DAW yet. In particular, keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host.
 - **Draggable EQ handles on the display** (a stretch goal) are not implemented.
 - **CPU:** the engine always processes in stereo, also for a mono source with mono IRs.
 
