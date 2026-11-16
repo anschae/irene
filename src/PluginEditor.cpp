@@ -20,7 +20,7 @@ namespace irene
 
         g.setColour (juce::Colour (0xff9aa0a8));
         g.setFont (juce::FontOptions (15.0f));
-        g.drawText (juce::String ("v") + kVersionString + "  -  pass-through skeleton build",
+        g.drawText (juce::String ("v") + kVersionString + "  -  DSP core build (user interface follows in milestone 3)",
                     area.removeFromTop (30),
                     juce::Justification::centred);
     }

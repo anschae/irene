@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 1 of 8 (skeleton).** The plugin currently passes audio through unchanged. It exists to prove that the build, signing and validation pipeline works. See [Roadmap](#roadmap).
+> **Status: milestone 2 of 8 (DSP core).** The audio engine, IR loading and project state are in place and covered by unit tests, but there is no user interface yet, so IRs can't be loaded from a DAW. See [Roadmap](#roadmap).
 
 ## Download
 
@@ -55,7 +55,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 ## Roadmap
 
 1. **Skeleton**: build system, CI, pass-through plugin ← *done*
-2. DSP core: slots, convolution, filter blocks, delay, mix, IR loading, project state
+2. **DSP core**: slots, convolution, filter blocks, delay, mix, IR loading, project state ← *done*
 3. Basic UI
 4. IR browser with favourites
 5. Presets
@@ -73,6 +73,27 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **pluginval strictness is 10** (the maximum), above the required 5.
 - **Validation on Linux too:** the Linux job builds the VST3 and runs pluginval without GUI tests, as a fast extra check. No Linux binaries are published.
 - **macOS builds are ad-hoc signed, not notarised**, hence the quarantine step above.
+
+### Sound and signal flow
+
+- **Nothing loaded means silence.** The mix defaults to 100 % wet and an empty slot outputs nothing, so a fresh instance is silent until an IR is loaded.
+- **Zero latency.** The convolution runs in JUCE's zero-latency mode (a 2048-sample low-latency head, larger FFT blocks for the rest of long IRs). The plugin reports 0 samples, so the dry signal needs no compensation delay.
+- **Pan law.** Mono IRs use an equal-power pan that is unity gain in the centre (so +3 dB when panned hard to one side). Stereo IRs use a balance control that only attenuates the opposite side. On a mono output, pan is ignored and a stereo IR is summed to mono (L+R at −6 dB each).
+- **Stereo input with a mono IR** is processed as dual mono (left and right each convolved with the IR), so a stereo guitar bus stays stereo.
+- **Slot gain** runs from −60 dB to +12 dB; the bottom of the range is "Off" (silent).
+- **IR length** is a percentage of the IR's full length (1–100 %), with a 5 ms fade-out when shortened. At 100 % the IR is untouched.
+- **Slot delay** uses 3rd-order Lagrange interpolation, which needs no latency. Whole-sample delays are exact. Between samples there is a slight treble roll-off, worst at exactly half a sample: about −0.5 dB at 10 kHz and −2.5 dB at 15 kHz in a 48 kHz session.
+- **Filters** are state-variable (TPT) filters: high/low-pass are Butterworth (12 or 24 dB/oct); EQ bands are bell or shelf. Parameter changes ramp over 30 ms; a peak/shelf switch passes through 0 dB.
+- **Everything runs in stereo internally**, also for a mono source with mono IRs. This costs some CPU that could be saved later.
+
+### Impulse responses
+
+- **Resampling** uses a windowed-sinc converter (64 zero crossings, about 100 dB stop band) and always starts from the original file audio. IRs are scaled so that their frequency response, not their sample values, is preserved at the new rate.
+- **Loudness normalisation** brings the pink-noise-weighted average level of the IR between 80 Hz and 8 kHz to 0 dB, i.e. a normalised IR passes band-limited pink noise at unity. The gain is baked into the IR that is played (so it crossfades together with the IR) and never touches the slot's gain control.
+- **Normalise and auto-trim are stored per slot** when an IR is loaded, taken from the global defaults at that moment. Changing the defaults later doesn't alter existing projects.
+- **Auto-trim** removes leading audio that is more than 60 dB below the IR's peak, keeping 2 samples of pre-roll. It is off by default.
+- **Project state** embeds each IR's original audio as losslessly compressed 32-bit float, together with its path, name and content hash.
+- **Content hash** is a 64-bit FNV-1a hash of the file's bytes plus the file size. It is meant to recognise moved or renamed files, not for security.
 
 ## For developers
 

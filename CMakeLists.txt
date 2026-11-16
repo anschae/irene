@@ -59,7 +59,26 @@ target_sources(IReneShared INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Settings.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Parameters.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Parameters.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/Svf.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/FilterBlock.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/FilterBlock.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/FractionalDelay.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/SlotDsp.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/SlotDsp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/Engine.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/Engine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/IRSource.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/IRSource.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/IRProcessing.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/IRProcessing.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/IRSerialisation.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/IRSerialisation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/SlotManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir/SlotManager.cpp)
 
 target_include_directories(IReneShared INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -125,7 +144,11 @@ if(IRENE_BUILD_TESTS)
 
     target_sources(IReneTests PRIVATE
         tests/TestMain.cpp
-        tests/PassThroughTests.cpp)
+        tests/TestHelpers.h
+        tests/FilterTests.cpp
+        tests/IRProcessingTests.cpp
+        tests/EngineTests.cpp
+        tests/ProcessorTests.cpp)
 
     target_link_libraries(IReneTests PRIVATE IReneShared)
 
