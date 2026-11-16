@@ -6,6 +6,7 @@
 #include "ui/BrowserPanel.h"
 #include "ui/FilterEditor.h"
 #include "ui/GlobalSection.h"
+#include "ui/PresetBar.h"
 #include "ui/SettingsPanel.h"
 #include "ui/SlotStrip.h"
 #include "ui/Theme.h"
@@ -58,12 +59,13 @@ namespace irene
             IReneEditor& editor;
             juce::Label title, version;
             juce::TextButton settingsButton { "Settings" }, browserButton { "Browser" };
+            ui::ConfirmOverlay confirm;
+            ui::PresetBar presetBar;
             ui::BrowserPanel browser;
             ui::FilterEditor filterEditor;
             juce::OwnedArray<ui::SlotStrip> strips;
             ui::GlobalSection globalSection;
             ui::SettingsPanel settingsPanel;
-            ui::ConfirmOverlay confirm;
         };
 
         void changeListenerCallback (juce::ChangeBroadcaster*) override;

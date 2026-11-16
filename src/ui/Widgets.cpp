@@ -82,10 +82,18 @@ namespace irene::ui
     {
         addAndMakeVisible (confirmButton);
         addAndMakeVisible (cancelButton);
+        addChildComponent (textField);
+        addChildComponent (checkbox);
+
         confirmButton.setColour (juce::TextButton::buttonColourId, colours::accent);
         confirmButton.setColour (juce::TextButton::textColourOffId, juce::Colours::black);
         confirmButton.onClick = [this] { finish (true); };
         cancelButton.onClick = [this] { finish (false); };
+
+        textField.setFont (font (15.0f));
+        textField.onReturnKey = [this] { finish (true); };
+        textField.onEscapeKey = [this] { finish (false); };
+
         setWantsKeyboardFocus (true);
         setVisible (false);
     }
@@ -94,7 +102,7 @@ namespace irene::ui
                               const juce::String& confirmText, const juce::String& cancelText,
                               std::function<void (bool)> callback)
     {
-        // A question that is still open is answered with "cancel".
+        // A dialog that is still open is answered with "cancel".
         if (isVisible())
             finish (false);
 
@@ -102,8 +110,53 @@ namespace irene::ui
         message = newMessage;
         confirmButton.setButtonText (confirmText);
         cancelButton.setButtonText (cancelText);
-        onResult = std::move (callback);
+        cancelButton.setVisible (true);
+        textField.setVisible (false);
+        checkbox.setVisible (false);
 
+        onResult = [cb = std::move (callback)] (bool confirmed, const juce::String&, bool)
+        {
+            if (cb)
+                cb (confirmed);
+        };
+
+        show();
+    }
+
+    void ConfirmOverlay::inform (const juce::String& newTitle, const juce::String& newMessage)
+    {
+        ask (newTitle, newMessage, "OK", {}, nullptr);
+        cancelButton.setVisible (false);
+    }
+
+    void ConfirmOverlay::prompt (const juce::String& newTitle, const juce::String& newMessage, const juce::String& initialText,
+                                 const juce::String& checkboxText, bool checkboxState, const juce::String& confirmText,
+                                 std::function<void (bool, const juce::String&, bool)> callback)
+    {
+        if (isVisible())
+            finish (false);
+
+        title = newTitle;
+        message = newMessage;
+        confirmButton.setButtonText (confirmText);
+        cancelButton.setButtonText ("Cancel");
+        cancelButton.setVisible (true);
+
+        textField.setText (initialText, false);
+        textField.setVisible (true);
+        checkbox.setButtonText (checkboxText);
+        checkbox.setToggleState (checkboxState, juce::dontSendNotification);
+        checkbox.setVisible (checkboxText.isNotEmpty());
+
+        onResult = std::move (callback);
+        show();
+
+        textField.grabKeyboardFocus();
+        textField.selectAll();
+    }
+
+    void ConfirmOverlay::show()
+    {
         setVisible (true);
         toFront (true);
         resized();
@@ -115,33 +168,41 @@ namespace irene::ui
         setVisible (false);
 
         if (auto callback = std::exchange (onResult, nullptr))
-            callback (confirmed);
+            callback (confirmed, textField.getText(), checkbox.getToggleState());
     }
 
     bool ConfirmOverlay::keyPressed (const juce::KeyPress& key)
     {
         if (key == juce::KeyPress::escapeKey)
-        {
             finish (false);
-            return true;
-        }
-
-        if (key == juce::KeyPress::returnKey)
-        {
+        else if (key == juce::KeyPress::returnKey)
             finish (true);
-            return true;
-        }
 
-        return true; // swallow everything else while the question is open
+        return true; // swallow everything else while the dialog is open
     }
 
     void ConfirmOverlay::resized()
     {
-        box = juce::Rectangle<int> (440, 170).withCentre (getLocalBounds().getCentre());
-        auto buttons = box.reduced (18).removeFromBottom (30);
+        const auto hasText = textField.isVisible();
+        const auto hasCheckbox = checkbox.isVisible();
+
+        box = juce::Rectangle<int> (460, 170 + (hasText ? 34 : 0) + (hasCheckbox ? 28 : 0)).withCentre (getLocalBounds().getCentre());
+        auto area = box.reduced (18);
+
+        auto buttons = area.removeFromBottom (30);
         confirmButton.setBounds (buttons.removeFromRight (130));
         buttons.removeFromRight (10);
         cancelButton.setBounds (buttons.removeFromRight (110));
+        area.removeFromBottom (10);
+
+        if (hasCheckbox)
+            checkbox.setBounds (area.removeFromBottom (26));
+
+        if (hasText)
+        {
+            area.removeFromBottom (4);
+            textField.setBounds (area.removeFromBottom (28));
+        }
     }
 
     void ConfirmOverlay::paint (juce::Graphics& g)
@@ -158,7 +219,7 @@ namespace irene::ui
         g.setFont (font (17.0f, true));
         g.drawText (title, area.removeFromTop (26), juce::Justification::centredLeft);
 
-        area.removeFromBottom (38);
+        area.removeFromBottom (40 + (textField.isVisible() ? 34 : 0) + (checkbox.isVisible() ? 28 : 0));
         g.setColour (colours::textDim);
         g.setFont (font (14.0f));
         g.drawFittedText (message, area, juce::Justification::topLeft, 4);

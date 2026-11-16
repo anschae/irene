@@ -6,7 +6,7 @@ namespace irene
 
     //==============================================================================
     IReneEditor::Content::Content (IReneEditor& e, IReneProcessor& p)
-        : editor (e), browser (p), filterEditor (p), globalSection (p)
+        : editor (e), presetBar (p, confirm), browser (p), filterEditor (p), globalSection (p)
     {
         setComponentID (kContentComponentId);
 
@@ -26,6 +26,7 @@ namespace irene
             settingsPanel.toFront (true);
         };
         addAndMakeVisible (settingsButton);
+        addAndMakeVisible (presetBar);
 
         browserButton.setClickingTogglesState (true);
         browserButton.setTooltip ("Show or hide the IR browser");
@@ -61,6 +62,9 @@ namespace irene
         settingsButton.setBounds (header.removeFromRight (90).reduced (0, 2));
         header.removeFromRight (6);
         browserButton.setBounds (header.removeFromRight (90).reduced (0, 2));
+        header.removeFromLeft (20);
+        header.removeFromRight (20);
+        presetBar.setBounds (header.removeFromLeft (juce::jmin (header.getWidth(), 520)).reduced (0, 2));
         area.removeFromTop (8);
 
         browser.setVisible (editor.isBrowserOpen());

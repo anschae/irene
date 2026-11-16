@@ -14,6 +14,7 @@ namespace irene
         const juce::Identifier kUiType { "UI" };
         const juce::Identifier kFilterTab { "filterTab" };
         const juce::Identifier kTargetSlot { "targetSlot" };
+        const juce::Identifier kPresetName { "presetName" };
 
         ParamRefs makeParamRefs (juce::AudioProcessorValueTreeState& apvts)
         {
@@ -42,6 +43,7 @@ namespace irene
 
     IReneProcessor::~IReneProcessor()
     {
+        masterReference.clear();
         globalSettings->removeChangeListener (this);
     }
 
@@ -199,13 +201,55 @@ namespace irene
     }
 
     //==============================================================================
-    juce::ValueTree IReneProcessor::saveState (bool embedAudio)
+    juce::ValueTree IReneProcessor::savePresetState (bool embedAudio)
     {
         juce::ValueTree state { stateType };
         state.setProperty (kStateVersionId, kStateVersion, nullptr);
         state.setProperty (kPluginVersionId, juce::String (kVersionString), nullptr);
         state.appendChild (apvts.copyState(), nullptr);
         state.appendChild (slotManager.toValueTree (embedAudio), nullptr);
+        return state;
+    }
+
+    void IReneProcessor::applyPresetState (const juce::ValueTree& state)
+    {
+        if (! state.hasType (stateType))
+            return;
+
+        // Parameters first: the slots read their "IR length" while they rebuild.
+        if (const auto params = state.getChildWithName (kParametersType); params.isValid())
+            apvts.replaceState (params.createCopy());
+
+        if (const auto slots = state.getChildWithName (SlotManager::treeType); slots.isValid())
+            slotManager.fromValueTree (slots);
+
+        for (auto& context : slotListContexts)
+            context.clear();
+    }
+
+    void IReneProcessor::resetToDefaults()
+    {
+        for (auto* param : getParameters())
+        {
+            if (! juce::exactlyEqual (param->getValue(), param->getDefaultValue()))
+            {
+                param->beginChangeGesture();
+                param->setValueNotifyingHost (param->getDefaultValue());
+                param->endChangeGesture();
+            }
+        }
+
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            slotManager.clear (i);
+            slotListContexts[static_cast<size_t> (i)].clear();
+        }
+    }
+
+    juce::ValueTree IReneProcessor::saveState (bool embedAudio)
+    {
+        auto state = savePresetState (embedAudio);
+        state.setProperty (kPresetName, presets.getCurrentName(), nullptr);
 
         juce::ValueTree ui { kUiType };
         ui.setProperty (kFilterTab, uiState.filterTab.load(), nullptr);
@@ -219,18 +263,25 @@ namespace irene
         if (! state.hasType (stateType))
             return;
 
-        // Parameters first: the slots read their "IR length" while they rebuild.
-        if (const auto params = state.getChildWithName (kParametersType); params.isValid())
-            apvts.replaceState (params.createCopy());
-
-        if (const auto slots = state.getChildWithName (SlotManager::treeType); slots.isValid())
-            slotManager.fromValueTree (slots);
+        applyPresetState (state);
 
         if (const auto ui = state.getChildWithName (kUiType); ui.isValid())
         {
             uiState.filterTab = juce::jlimit (0, kNumSlots + 1, static_cast<int> (ui.getProperty (kFilterTab, 0)));
             uiState.targetSlot = juce::jlimit (0, kNumSlots - 1, static_cast<int> (ui.getProperty (kTargetSlot, 0)));
         }
+
+        // Only a label: the project state itself is what counts.
+        const auto presetName = state.getProperty (kPresetName).toString();
+
+        if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+            presets.setCurrentName (presetName);
+        else
+            juce::MessageManager::callAsync ([weak = juce::WeakReference<IReneProcessor> (this), presetName]
+            {
+                if (weak != nullptr)
+                    weak->presets.setCurrentName (presetName);
+            });
     }
 
     void IReneProcessor::getStateInformation (juce::MemoryBlock& destData)

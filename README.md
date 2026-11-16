@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 4 of 8 (IR browser).** Loading, blending, filtering, the IR browser with favourites, and project recall are in place. Presets, the frequency display and export are still to come. See [Roadmap](#roadmap).
+> **Status: milestone 5 of 8 (presets).** Loading, blending, filtering, the IR browser with favourites, presets and project recall are in place. The frequency display and export are still to come. See [Roadmap](#roadmap).
 
 ## Download
 
@@ -58,7 +58,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 2. **DSP core**: slots, convolution, filter blocks, delay, mix, IR loading, project state ← *done*
 3. **Basic UI**: slot strips, filter editor, meters, settings page, scaling ← *done*
 4. **IR browser**: favourite folders, favourites, recent, search, instant auditioning ← *done*
-5. Presets
+5. **Presets**: save, save as, rename, delete, prev/next, Init, portable presets, missing-file handling ← *done*
 6. Frequency response display
 7. Export as single IR
 8. Polish and release `v0.1.0`
@@ -94,6 +94,16 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Prev/next on a slot** steps through the browser list the IR was picked from. For an IR loaded another way (file dialog, drag from the desktop), it steps through the other IR files in the same folder. Both wrap around.
 - **Scanning** runs on a background thread at low priority. Files whose size and modification time are unchanged are not opened again. Unreadable `.wav`/`.aiff` files are remembered and hidden.
 - **Future-proof file format:** the library file has a version number, and attributes that this version doesn't know (such as tags or ratings written by a later version) are kept when the file is saved.
+
+### Presets
+
+- **One file per preset** (`.irenepreset`) in the presets folder. The default folder is `Presets` inside IRene's settings folder; it can be changed in Settings.
+- **A preset stores** all parameters and, for each slot, the IR's path, file name, content hash and its Norm/Trim options. It does not store the editor state (selected tab, target slot).
+- **Portable presets** additionally contain the original IR audio. "Save" keeps a preset's portable choice; "Save as" asks.
+- **"Init"** is built in: all parameters at their defaults and all slots empty. It is part of the prev/next cycle and can't be overwritten.
+- **Missing IR files** are looked for at the stored path, then by content hash, then by file name (hash and name need the file to be in a favourite folder). If nothing is found the slot shows "missing" and its Load button becomes "Locate...".
+- **The preset name is saved with the DAW project** as a label only. The project always restores its own embedded state, even if the preset file was changed or deleted since.
+- **Deleting a preset** leaves the current settings untouched.
 
 ### Sound and signal flow
 

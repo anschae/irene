@@ -4,6 +4,7 @@
 
 #include "Config.h"
 #include "app/GlobalSettings.h"
+#include "app/PresetManager.h"
 #include "dsp/Engine.h"
 #include "ir/SlotManager.h"
 #include "library/IRLibrary.h"
@@ -61,6 +62,15 @@ namespace irene
         juce::ValueTree saveState (bool embedAudio);
         void restoreState (const juce::ValueTree& state);
 
+        /** The part of the state that a preset stores: parameters and slots. */
+        juce::ValueTree savePresetState (bool embedAudio);
+        void applyPresetState (const juce::ValueTree& state);
+
+        /** All parameters back to their defaults, all slots empty. Message thread. */
+        void resetToDefaults();
+
+        PresetManager& getPresets() noexcept { return presets; }
+
         static const juce::Identifier stateType;
 
         //==============================================================================
@@ -113,7 +123,9 @@ namespace irene
         ParamRefs paramRefs;
         Engine engine;
         SlotManager slotManager;
+        PresetManager presets { *this };
 
+        JUCE_DECLARE_WEAK_REFERENCEABLE (IReneProcessor)
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IReneProcessor)
     };
 }

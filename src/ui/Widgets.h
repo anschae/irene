@@ -50,17 +50,27 @@ namespace irene::ui
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
     };
 
-    /** A simple in-window question ("message", two buttons). Covers its parent
-        while visible. Used instead of native dialogs, which behave differently
-        from host to host. */
+    /** A simple in-window dialog: a question with two buttons, a message with
+        one, or a prompt with a text field and an optional checkbox. Covers its
+        parent while visible. Used instead of native dialogs, which behave
+        differently from host to host. */
     class ConfirmOverlay final : public juce::Component
     {
     public:
         ConfirmOverlay();
 
+        /** Yes/no question. */
         void ask (const juce::String& title, const juce::String& message,
                   const juce::String& confirmText, const juce::String& cancelText,
                   std::function<void (bool confirmed)> callback);
+
+        /** Just a message with an OK button. */
+        void inform (const juce::String& title, const juce::String& message);
+
+        /** Text input, optionally with a checkbox (pass an empty checkboxText for none). */
+        void prompt (const juce::String& title, const juce::String& message, const juce::String& initialText,
+                     const juce::String& checkboxText, bool checkboxState, const juce::String& confirmText,
+                     std::function<void (bool confirmed, const juce::String& text, bool checked)> callback);
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -68,11 +78,14 @@ namespace irene::ui
         bool keyPressed (const juce::KeyPress&) override;
 
     private:
+        void show();
         void finish (bool confirmed);
 
         juce::String title, message;
         juce::TextButton confirmButton, cancelButton;
-        std::function<void (bool)> onResult;
+        juce::TextEditor textField;
+        juce::ToggleButton checkbox;
+        std::function<void (bool, const juce::String&, bool)> onResult;
         juce::Rectangle<int> box;
     };
 
