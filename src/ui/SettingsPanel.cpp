@@ -33,6 +33,7 @@ namespace irene::ui
         presetsPath.setFont (font (13.0f));
         presetsPath.setMinimumHorizontalScale (0.6f);
 
+        closeButton.setTooltip ("Close the settings (changes are saved immediately)");
         closeButton.onClick = [this] { if (onClose) onClose(); };
         addAndMakeVisible (closeButton);
 
@@ -83,13 +84,13 @@ namespace irene::ui
             addAndMakeVisible (b);
 
         setWantsKeyboardFocus (true);
-        settings->addChangeListener (this);
+        settings->addListener (this);
         refresh();
     }
 
     SettingsPanel::~SettingsPanel()
     {
-        settings->removeChangeListener (this);
+        settings->removeListener (this);
     }
 
     void SettingsPanel::refresh()

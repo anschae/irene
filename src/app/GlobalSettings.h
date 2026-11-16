@@ -3,6 +3,8 @@
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_events/juce_events.h>
 
+#include "Broadcaster.h"
+
 namespace irene
 {
     /** User settings that are the same in every DAW and every plugin instance.
@@ -19,7 +21,7 @@ namespace irene
         - The file is written atomically (temp file, then rename).
 
         Sends a change message on the message thread whenever the data changes. */
-    class GlobalSettings final : public juce::ChangeBroadcaster,
+    class GlobalSettings final : public Broadcaster,
                                  private juce::Timer
     {
     public:

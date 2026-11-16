@@ -75,13 +75,17 @@ namespace irene
         doesn't know (e.g. future tags and ratings) are kept untouched.
 
         Sends a change message (message thread) when anything changes. */
-    class IRLibrary final : public juce::ChangeBroadcaster,
+    class IRLibrary final : public Broadcaster,
                             private juce::Thread,
                             private juce::Timer,
-                            private juce::ChangeListener
+                            private Broadcaster::Listener
     {
     public:
         using Shared = juce::SharedResourcePointer<IRLibrary>;
+
+        // (juce::Thread has listener functions of its own)
+        using Broadcaster::addListener;
+        using Broadcaster::removeListener;
 
         static constexpr int kFileVersion = 1;
         static constexpr int kMaxRecent = 50;
@@ -129,7 +133,7 @@ namespace irene
     private:
         void run() override;
         void timerCallback() override;
-        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void broadcasterChanged (Broadcaster*) override;
 
         void loadLibraryFile();
         void saveLibraryFile();

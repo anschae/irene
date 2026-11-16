@@ -23,7 +23,7 @@ namespace irene
         scale is a global setting and is remembered. */
     class IReneEditor final : public juce::AudioProcessorEditor,
                               public juce::DragAndDropContainer,
-                              private juce::ChangeListener,
+                              private Broadcaster::Listener,
                               private juce::Timer
     {
     public:
@@ -33,12 +33,16 @@ namespace irene
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        /** Size of the UI at 100 % (the browser adds to the width when open). */
-        static constexpr int kBaseWidth = 1120;
+        /** Size of the UI at 100 % (the browser adds to the width when open).
+            The width grows with the number of slots. */
+        static constexpr int kGap = 8;
+        static constexpr int kStripWidth = 315;
+        static constexpr int kGlobalWidth = 130;
+        static constexpr int kMargin = 10;
+        static constexpr int kBaseWidth = 2 * kMargin + kNumSlots * kStripWidth + (kNumSlots - 1) * kGap + kGap + kGlobalWidth;
         static constexpr int kBaseHeight = 702;
         static constexpr int kDisplayHeight = 190;
         static constexpr int kBrowserWidth = 300;
-        static constexpr int kGap = 8;
 
         int getBaseWidth() const noexcept { return kBaseWidth + (browserOpen ? kBrowserWidth + kGap : 0); }
 
@@ -75,7 +79,7 @@ namespace irene
             ui::ExportPanel exportPanel;
         };
 
-        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void broadcasterChanged (Broadcaster*) override;
         void timerCallback() override;
         void applyScale (float scale);
         void applyGlobalSettings();

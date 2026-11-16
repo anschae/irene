@@ -17,7 +17,7 @@ namespace irene::ui
         is virtualised, so it stays fast with thousands of files. */
     class BrowserPanel final : public juce::Component,
                                private juce::TableListBoxModel,
-                               private juce::ChangeListener,
+                               private Broadcaster::Listener,
                                private juce::Timer
     {
     public:
@@ -86,7 +86,7 @@ namespace irene::ui
         juce::var getDragSourceDescription (const juce::SparseSet<int>& rows) override;
         juce::String getCellTooltip (int row, int column) override;
 
-        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void broadcasterChanged (Broadcaster*) override;
         void timerCallback() override;
 
         using BrowserState = IReneProcessor::BrowserState;

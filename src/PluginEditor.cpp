@@ -66,7 +66,7 @@ namespace irene
 
     void IReneEditor::Content::resized()
     {
-        auto area = getLocalBounds().reduced (10);
+        auto area = getLocalBounds().reduced (kMargin);
 
         auto header = area.removeFromTop (30);
         title.setBounds (header.removeFromLeft (74));
@@ -89,8 +89,8 @@ namespace irene
             area.removeFromLeft (kGap);
         }
 
-        globalSection.setBounds (area.removeFromRight (130));
-        area.removeFromRight (8);
+        globalSection.setBounds (area.removeFromRight (kGlobalWidth));
+        area.removeFromRight (kGap);
 
         display.setBounds (area.removeFromTop (kDisplayHeight));
         area.removeFromTop (8);
@@ -160,9 +160,9 @@ namespace irene
 
         setResizable (true, true);
 
-        plugin.getGlobalSettings().addChangeListener (this);
-        plugin.getLibrary().addChangeListener (this);
-        plugin.getSlots().addChangeListener (this);
+        plugin.getGlobalSettings().addListener (this);
+        plugin.getLibrary().addListener (this);
+        plugin.getSlots().addListener (this);
 
         browserOpen = plugin.getGlobalSettings().get().browserOpen;
         content.browserButton.setToggleState (browserOpen, juce::dontSendNotification);
@@ -174,9 +174,9 @@ namespace irene
     IReneEditor::~IReneEditor()
     {
         stopTimer();
-        plugin.getSlots().removeChangeListener (this);
-        plugin.getLibrary().removeChangeListener (this);
-        plugin.getGlobalSettings().removeChangeListener (this);
+        plugin.getSlots().removeListener (this);
+        plugin.getLibrary().removeListener (this);
+        plugin.getGlobalSettings().removeListener (this);
         tooltips.setLookAndFeel (nullptr);
         setLookAndFeel (nullptr);
     }
@@ -227,7 +227,7 @@ namespace irene
         plugin.getGlobalSettings().update ([scale] (auto& d) { d.uiScale = scale; });
     }
 
-    void IReneEditor::changeListenerCallback (juce::ChangeBroadcaster* source)
+    void IReneEditor::broadcasterChanged (Broadcaster* source)
     {
         if (source == &plugin.getGlobalSettings())
             applyGlobalSettings();

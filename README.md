@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 7 of 8.** All features of version 0.1 are implemented and tested on Linux. The macOS and Windows builds have not run yet (see [Known gaps](#known-gaps)).
+> **Status: version 0.1.0, feature complete, not yet released.** All features are implemented and tested on Linux. The macOS and Windows builds have not run yet, and the plugin has not been tried in Cubase or Logic (see [Known gaps](#known-gaps)). The release tag `v0.1.0` will be set once CI is green.
 
 ## Download
 
@@ -61,7 +61,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 5. **Presets**: save, save as, rename, delete, prev/next, Init, portable presets, missing-file handling ← *done*
 6. **Frequency response display**: combined wet-path response, per-slot curves, channel and smoothing options ← *done* (draggable EQ handles on the display, a stretch goal, are not implemented)
 7. **Export as single IR**, with the equivalence test ← *done*
-8. Polish and release `v0.1.0`
+8. **Polish**: tooltips, README, thread-safety hardening ← *done*. Release tag `v0.1.0` ← *waiting for a green CI run*
 
 ## Design decisions
 
@@ -81,6 +81,9 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Dialogs and menus open inside the plugin window** rather than as separate system windows, because those behave differently from host to host.
 - **Each slot has Norm and Trim buttons** in addition to the controls in the spec, to switch loudness normalisation and auto-trim for the IR in that slot.
 - **The selected filter tab and the browser's target slot** are saved with the project (they are not automatable parameters).
+- **Clicking anywhere in a slot strip**, including on its controls, makes that slot the browser's target.
+- **More slots make the window wider.** The base width is computed from `kNumSlots`; the code was checked by building and testing with five slots.
+- **Instances may be created on any thread.** Settings, library and slot notifications use a small thread-safe broadcaster instead of `juce::ChangeBroadcaster`, because some hosts create and destroy plugins off the main thread.
 - A developer tool (`-DIRENE_BUILD_TOOLS=ON`, target `IReneSnapshot`) renders the editor to PNG files without a DAW.
 
 ### IR browser and library

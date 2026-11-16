@@ -4,6 +4,8 @@
 #include "PluginProcessor.h"
 #include "app/GlobalSettings.h"
 
+#include <thread>
+
 namespace
 {
     using namespace irene;
@@ -46,6 +48,9 @@ namespace
                 const auto file = GlobalSettings::getDataDirectory().getChildFile ("settings.xml");
                 file.deleteFile();
 
+                // a path that is absolute on every platform
+                const auto customPresets = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("somewhere").getChildFile ("presets");
+
                 {
                     GlobalSettings settings;
                     const auto d = settings.get();
@@ -57,13 +62,13 @@ namespace
                     expectEquals (settings.getPresetsFolder().getFullPathName(),
                                   GlobalSettings::getDataDirectory().getChildFile ("Presets").getFullPathName());
 
-                    settings.update ([] (auto& s)
+                    settings.update ([&customPresets] (auto& s)
                     {
                         s.uiScale = 1.5f;
                         s.askBeforeResampling = true;
                         s.defaultAutoTrim = true;
                         s.defaultNormalise = false;
-                        s.presetsFolder = "/somewhere/presets";
+                        s.presetsFolder = customPresets.getFullPathName();
                         s.favouriteFolders = { "/irs/b", "/irs/a", "/irs/b", "" };
                     });
 
@@ -75,9 +80,9 @@ namespace
                 auto d = settings.get();
                 expectEquals (d.uiScale, 1.5f);
                 expect (d.askBeforeResampling && d.defaultAutoTrim && ! d.defaultNormalise);
-                expectEquals (d.presetsFolder, juce::String ("/somewhere/presets"));
+                expectEquals (d.presetsFolder, customPresets.getFullPathName());
                 expectEquals (d.favouriteFolders.joinIntoString ("|"), juce::String ("/irs/b|/irs/a")); // order kept, duplicates and blanks removed
-                expectEquals (settings.getPresetsFolder().getFullPathName(), juce::File ("/somewhere/presets").getFullPathName());
+                expectEquals (settings.getPresetsFolder().getFullPathName(), customPresets.getFullPathName());
 
                 // The file carries a version number
                 const auto xml = juce::parseXML (file);
@@ -214,6 +219,99 @@ namespace
                 pumpMessages();
                 editor.reset();
                 expectEquals (restored.uiState.filterTab.load(), 2);
+            }
+
+            beginTest ("Broadcaster: asynchronous, coalesced, safe to add/remove/destroy at any time");
+            {
+                struct Counter final : Broadcaster::Listener
+                {
+                    void broadcasterChanged (Broadcaster* source) override
+                    {
+                        ++calls;
+                        lastSource = source;
+
+                        if (removeFrom != nullptr)
+                            removeFrom->removeListener (this);
+                    }
+
+                    int calls = 0;
+                    Broadcaster* lastSource = nullptr;
+                    Broadcaster* removeFrom = nullptr;
+                };
+
+                Counter a, b;
+
+                {
+                    Broadcaster broadcaster;
+                    broadcaster.addListener (&a);
+                    broadcaster.addListener (&b);
+                    broadcaster.addListener (&a); // twice is once
+
+                    broadcaster.sendChange();
+                    broadcaster.sendChange();
+                    expectEquals (a.calls, 0); // never synchronous
+                    pumpMessages();
+                    expectEquals (a.calls, 1); // coalesced
+                    expectEquals (b.calls, 1);
+                    expect (a.lastSource == &broadcaster);
+
+                    // a listener may remove itself during the callback
+                    a.removeFrom = &broadcaster;
+                    broadcaster.sendChange();
+                    pumpMessages();
+                    broadcaster.sendChange();
+                    pumpMessages();
+                    expectEquals (a.calls, 2);
+                    expectEquals (b.calls, 3);
+
+                    // sending from another thread
+                    std::thread ([&broadcaster] { broadcaster.sendChange(); }).join();
+                    pumpMessages();
+                    expectEquals (b.calls, 4);
+
+                    broadcaster.sendChange(); // still queued when the broadcaster dies
+                }
+
+                pumpMessages();
+                expectEquals (b.calls, 4);
+            }
+
+            beginTest ("Plugin instances can be created and destroyed on another thread");
+            {
+                // Some hosts do this. The shared settings and library must cope with
+                // instances coming and going while the message thread is busy.
+                IReneProcessor keepAlive; // holds the shared objects, as an open project would
+                std::atomic<bool> done { false };
+
+                std::thread worker ([&done]
+                {
+                    for (int i = 0; i < 12; ++i)
+                    {
+                        IReneProcessor processor;
+                        processor.prepareToPlay (48000.0, 128);
+                        processor.getSlots().setSource (0, makeSource (makeTestIR (1, 200, i + 1), 48000.0));
+
+                        juce::MemoryBlock state;
+                        processor.getStateInformation (state);
+                        processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+                    }
+
+                    done = true;
+                });
+
+                GlobalSettings::Shared settings;
+
+                for (int i = 0; ! done.load(); ++i)
+                {
+                    // keep the shared objects broadcasting while instances register and unregister
+                    settings->update ([i] (auto& d) { d.defaultAutoTrim = (i % 2) == 0; });
+                    pumpMessages (5);
+                }
+
+                worker.join();
+                settings->set ({});
+                pumpMessages();
+                expect (done.load());
             }
 
             beginTest ("File probing reads only the header");

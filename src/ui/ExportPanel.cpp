@@ -112,6 +112,8 @@ namespace irene::ui
         exportButton.setColour (juce::TextButton::textColourOffId, juce::Colours::black);
         exportButton.setTooltip ("Choose where to save the file and start the export");
         exportButton.onClick = [this] { chooseFileAndExport(); };
+        closeButton.setTooltip ("Close this page, or cancel a running export");
+        lengthMs.setTooltip ("Length of the exported IR in milliseconds (1 to 12000), used with \"Fixed length\"");
         closeButton.onClick = [this]
         {
             if (job != nullptr)

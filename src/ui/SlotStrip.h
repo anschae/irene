@@ -12,7 +12,7 @@ namespace irene::ui
     class SlotStrip final : public juce::Component,
                             public juce::FileDragAndDropTarget,
                             public juce::DragAndDropTarget,
-                            private juce::ChangeListener
+                            private Broadcaster::Listener
     {
     public:
         SlotStrip (IReneProcessor&, int slotIndex);
@@ -52,7 +52,7 @@ namespace irene::ui
         static inline const juce::String browserDragPrefix { "irene-file:" };
 
     private:
-        void changeListenerCallback (juce::ChangeBroadcaster*) override { refresh(); }
+        void broadcasterChanged (Broadcaster*) override { refresh(); }
         void setDragHover (bool);
         void updateDelayReadout();
         void showSwapMenu();

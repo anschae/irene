@@ -102,13 +102,17 @@ namespace irene::ui
         mute.setTooltip ("Mute this slot");
         solo.setTooltip ("Solo this slot (several slots can be soloed)");
 
-        processor.getSlots().addChangeListener (this);
+        // A click anywhere in the strip, including on its controls, makes it the
+        // browser's target slot.
+        addMouseListener (this, true);
+
+        processor.getSlots().addListener (this);
         refresh();
     }
 
     SlotStrip::~SlotStrip()
     {
-        processor.getSlots().removeChangeListener (this);
+        processor.getSlots().removeListener (this);
     }
 
     void SlotStrip::setSelected (bool shouldBeSelected)

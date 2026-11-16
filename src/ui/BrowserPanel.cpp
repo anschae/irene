@@ -181,8 +181,8 @@ namespace irene::ui
         settingsButton.onClick = [this] { if (onOpenSettings) onOpenSettings(); };
         addChildComponent (settingsButton);
 
-        library.addChangeListener (this);
-        processor.getSlots().addChangeListener (this);
+        library.addListener (this);
+        processor.getSlots().addListener (this);
         startTimerHz (4);
 
         // First visit: start in the first favourite folder, if there is one.
@@ -206,14 +206,14 @@ namespace irene::ui
 
     BrowserPanel::~BrowserPanel()
     {
-        processor.getSlots().removeChangeListener (this);
-        library.removeChangeListener (this);
+        processor.getSlots().removeListener (this);
+        library.removeListener (this);
         locationList.setModel (nullptr);
         table.setModel (nullptr);
     }
 
     //==============================================================================
-    void BrowserPanel::changeListenerCallback (juce::ChangeBroadcaster* source)
+    void BrowserPanel::broadcasterChanged (Broadcaster* source)
     {
         if (source != &processor.getSlots())
         {

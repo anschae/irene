@@ -9,7 +9,7 @@ namespace irene::ui
         is global: shared by all instances and all DAWs. */
     class SettingsPanel final : public juce::Component,
                                 private juce::ListBoxModel,
-                                private juce::ChangeListener
+                                private Broadcaster::Listener
     {
     public:
         SettingsPanel();
@@ -26,7 +26,7 @@ namespace irene::ui
         int getNumRows() override;
         void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
         void selectedRowsChanged (int) override { updateButtons(); }
-        void changeListenerCallback (juce::ChangeBroadcaster*) override { refresh(); }
+        void broadcasterChanged (Broadcaster*) override { refresh(); }
 
         void refresh();
         void updateButtons();

@@ -43,7 +43,6 @@ namespace irene
 
     SlotManager::~SlotManager()
     {
-        removeAllChangeListeners();
         signalThreadShouldExit();
         notify();
         stopThread (10000);
@@ -142,7 +141,7 @@ namespace irene
         ++buildGenerations[static_cast<size_t> (slot)];
 
         // If the engine rate isn't known yet, setEngineSampleRate() builds later.
-        sendChangeMessage();
+        sendChange();
     }
 
     juce::AudioBuffer<float> SlotManager::getPreparedIR (int slot)
@@ -224,7 +223,7 @@ namespace irene
         }
 
         notify();
-        sendChangeMessage();
+        sendChange();
     }
 
     void SlotManager::setSource (int slot, IRSource::Ptr source)
@@ -405,7 +404,7 @@ namespace irene
 
                 --pendingLoads[index];
                 --totalPending;
-                sendChangeMessage();
+                sendChange();
             }
 
             // 2. Follow the "IR length" parameters

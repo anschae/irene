@@ -3,6 +3,7 @@
 #include <juce_events/juce_events.h>
 
 #include "IRProcessing.h"
+#include "app/Broadcaster.h"
 #include "IRSource.h"
 #include "dsp/Engine.h"
 #include "params/Parameters.h"
@@ -43,12 +44,16 @@ namespace irene
 
         Sends a change message (on the message thread) whenever a slot's info
         changes. */
-    class SlotManager final : public juce::ChangeBroadcaster,
+    class SlotManager final : public Broadcaster,
                               private juce::Thread
     {
     public:
         SlotManager (Engine& engine, const ParamRefs& params);
         ~SlotManager() override;
+
+        // (juce::Thread has listener functions of its own)
+        using Broadcaster::addListener;
+        using Broadcaster::removeListener;
 
         //==============================================================================
         /** Tells the manager which rate the engine runs at. If it changed, all

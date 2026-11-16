@@ -61,6 +61,7 @@ target_sources(IReneShared INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/Broadcaster.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/GlobalSettings.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/GlobalSettings.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/PresetManager.h

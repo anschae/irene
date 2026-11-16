@@ -15,7 +15,7 @@ namespace irene
 {
     /** The plugin. Supported bus layouts: mono->mono, mono->stereo, stereo->stereo. */
     class IReneProcessor final : public juce::AudioProcessor,
-                                 private juce::ChangeListener
+                                 private Broadcaster::Listener
     {
     public:
         IReneProcessor();
@@ -123,7 +123,7 @@ namespace irene
         juce::File getAdjacentFile (int slot, int direction);
 
     private:
-        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void broadcasterChanged (Broadcaster*) override;
         void applyGlobalSettings();
 
         GlobalSettings::Shared globalSettings;

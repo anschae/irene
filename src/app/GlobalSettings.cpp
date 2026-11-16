@@ -80,7 +80,7 @@ namespace irene
             save();
         }
 
-        sendChangeMessage();
+        sendChange();
     }
 
     juce::File GlobalSettings::getPresetsFolder() const
@@ -173,7 +173,7 @@ namespace irene
                 return false;
         }
 
-        sendChangeMessage();
+        sendChange();
         return true;
     }
 

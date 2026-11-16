@@ -41,16 +41,16 @@ namespace irene
         slotManager.onFileLoaded = [lib = library] (int, const IRSource& source) { lib->addRecent (IRFileEntry::fromSource (source)); };
 
         applyGlobalSettings();
-        globalSettings->addChangeListener (this);
+        globalSettings->addListener (this);
     }
 
     IReneProcessor::~IReneProcessor()
     {
         masterReference.clear();
-        globalSettings->removeChangeListener (this);
+        globalSettings->removeListener (this);
     }
 
-    void IReneProcessor::changeListenerCallback (juce::ChangeBroadcaster*)
+    void IReneProcessor::broadcasterChanged (Broadcaster*)
     {
         applyGlobalSettings();
     }

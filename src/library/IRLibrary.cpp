@@ -182,7 +182,7 @@ namespace irene
         loadIndexCache();
 
         folders = settings->get().favouriteFolders;
-        settings->addChangeListener (this);
+        settings->addListener (this);
 
         startThread (juce::Thread::Priority::low);
         rescan();
@@ -192,7 +192,7 @@ namespace irene
     IRLibrary::~IRLibrary()
     {
         stopTimer();
-        settings->removeChangeListener (this);
+        settings->removeListener (this);
         signalThreadShouldExit();
         notify();
         stopThread (10000);
@@ -243,7 +243,7 @@ namespace irene
             saveLibraryFile();
         }
 
-        sendChangeMessage();
+        sendChange();
     }
 
     std::vector<IRFileEntry> IRLibrary::getFavourites() const
@@ -290,7 +290,7 @@ namespace irene
             saveLibraryFile();
         }
 
-        sendChangeMessage();
+        sendChange();
     }
 
     std::vector<IRFileEntry> IRLibrary::getRecent() const
@@ -357,7 +357,7 @@ namespace irene
             loadLibraryFile();
         }
 
-        sendChangeMessage();
+        sendChange();
         return true;
     }
 
@@ -439,7 +439,7 @@ namespace irene
             index = std::move (snapshot);
         }
 
-        sendChangeMessage();
+        sendChange();
     }
 
     void IRLibrary::setFolders (const juce::StringArray& newFolders)
@@ -456,7 +456,7 @@ namespace irene
         rescan();
     }
 
-    void IRLibrary::changeListenerCallback (juce::ChangeBroadcaster*)
+    void IRLibrary::broadcasterChanged (Broadcaster*)
     {
         setFolders (settings->get().favouriteFolders);
     }
@@ -466,7 +466,7 @@ namespace irene
         scanRequested = true;
         scanning = true;
         notify();
-        sendChangeMessage();
+        sendChange();
     }
 
     void IRLibrary::waitForScan()
@@ -581,7 +581,7 @@ namespace irene
             if (! scanRequested.load())
                 scanning = false;
 
-            sendChangeMessage();
+            sendChange();
         }
 
         scanning = false;
@@ -624,7 +624,7 @@ namespace irene
         }
 
         if (changed)
-            sendChangeMessage();
+            sendChange();
     }
 
     //==============================================================================
