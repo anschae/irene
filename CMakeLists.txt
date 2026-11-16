@@ -67,6 +67,10 @@ target_sources(IReneShared INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/PresetManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/PresetBar.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/PresetBar.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/analysis/Response.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/analysis/Response.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ResponseDisplay.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ResponseDisplay.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/library/IRLibrary.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/library/IRLibrary.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/BrowserPanel.h
@@ -175,7 +179,8 @@ if(IRENE_BUILD_TESTS)
         tests/ProcessorTests.cpp
         tests/SettingsAndUiTests.cpp
         tests/LibraryTests.cpp
-        tests/PresetTests.cpp)
+        tests/PresetTests.cpp
+        tests/ResponseTests.cpp)
 
     target_link_libraries(IReneTests PRIVATE IReneShared)
     # The tests pump the message loop by hand, which needs this switch.

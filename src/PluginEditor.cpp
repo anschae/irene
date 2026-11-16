@@ -6,7 +6,7 @@ namespace irene
 
     //==============================================================================
     IReneEditor::Content::Content (IReneEditor& e, IReneProcessor& p)
-        : editor (e), presetBar (p, confirm), browser (p), filterEditor (p), globalSection (p)
+        : editor (e), presetBar (p, confirm), browser (p), display (p), filterEditor (p), globalSection (p)
     {
         setComponentID (kContentComponentId);
 
@@ -35,6 +35,7 @@ namespace irene
 
         browser.onOpenSettings = [this] { settingsButton.triggerClick(); };
 
+        addAndMakeVisible (display);
         addAndMakeVisible (filterEditor);
         addAndMakeVisible (globalSection);
 
@@ -77,6 +78,9 @@ namespace irene
 
         globalSection.setBounds (area.removeFromRight (130));
         area.removeFromRight (8);
+
+        display.setBounds (area.removeFromTop (kDisplayHeight));
+        area.removeFromTop (8);
 
         filterEditor.setBounds (area.removeFromTop (176));
         area.removeFromTop (8);
@@ -125,8 +129,19 @@ namespace irene
             plugin.getGlobalSettings().update ([open] (auto& d) { d.browserOpen = open; });
         };
 
+        const auto showBlock = [this] (int tab)
+        {
+            const auto colour = FilterEditor::tabColour (tab);
+            content.display.setHighlightedBlock (tab, colour == colours::text ? colours::accent : colour);
+        };
+
         content.filterEditor.selectTab (plugin.uiState.filterTab.load());
-        content.filterEditor.onTabChanged = [this] (int tab) { plugin.uiState.filterTab = tab; };
+        showBlock (content.filterEditor.getSelectedTab());
+        content.filterEditor.onTabChanged = [this, showBlock] (int tab)
+        {
+            plugin.uiState.filterTab = tab;
+            showBlock (tab);
+        };
         selectTargetSlot (plugin.uiState.targetSlot.load());
 
         setResizable (true, true);

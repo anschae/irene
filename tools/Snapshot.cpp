@@ -97,6 +97,22 @@ int main (int argc, char* argv[])
     processor.getSlots().waitForPendingLoads();
     pumpMessages (100);
 
+    // A few non-default settings, so that the display has something to show.
+    const auto set = [&processor] (const char* id, float value)
+    {
+        if (auto* p = processor.getValueTreeState().getParameter (id))
+            p->setValueNotifyingHost (p->convertTo0to1 (value));
+    };
+
+    set ("in_hp_on", 1.0f);
+    set ("in_hp_freq", 80.0f);
+    set ("slot2_delay", 0.35f);
+    set ("slot2_pan", 30.0f);
+    set ("slot2_mid_on", 1.0f);
+    set ("slot2_mid_freq", 2500.0f);
+    set ("slot2_mid_gain", 7.0f);
+    set ("slot2_mid_q", 1.6f);
+
     // Feed some audio so that the meters show something.
     {
         juce::AudioBuffer<float> buffer (2, 512);
@@ -115,7 +131,7 @@ int main (int argc, char* argv[])
     }
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
-    pumpMessages (300);
+    pumpMessages (600);
 
     auto ok = save (*editor, out.getChildFile ("editor.png"));
 

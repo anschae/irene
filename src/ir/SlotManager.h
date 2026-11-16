@@ -86,6 +86,13 @@ namespace irene
             Empty if the slot is empty or the engine rate isn't known yet. */
         juce::AudioBuffer<float> getPreparedIR (int slot);
 
+        /** Changes every time the IR played by a slot changes (new file, sample
+            rate, length, options, cleared). Lock-free. */
+        juce::uint32 getBuildGeneration (int slot) const noexcept { return buildGenerations[static_cast<size_t> (slot)].load(); }
+
+        /** The rate the IRs are currently prepared for (0 before the first prepareToPlay). */
+        double getEngineSampleRate() const;
+
         /** Length of the longest IR as played, in seconds. Lock-free. */
         double getLongestIRSeconds() const noexcept { return longestSeconds.load (std::memory_order_relaxed); }
 
@@ -160,6 +167,7 @@ namespace irene
         std::vector<Job> jobs;
         std::array<std::atomic<juce::uint32>, kNumSlots> requestIds {};
         std::array<std::atomic<int>, kNumSlots> pendingLoads {};
+        std::array<std::atomic<juce::uint32>, kNumSlots> buildGenerations {};
         std::atomic<int> totalPending { 0 };
         std::atomic<double> longestSeconds { 0.0 };
 

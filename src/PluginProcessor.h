@@ -81,6 +81,11 @@ namespace irene
         {
             std::atomic<int> filterTab { 0 };  // 0 = Input, 1..kNumSlots = slots, last = Output
             std::atomic<int> targetSlot { 0 }; // the browser's target slot
+
+            // frequency display
+            std::atomic<bool> showSlotCurves { true };
+            std::atomic<int> responseChannel { 0 };   // 0 = Mid, 1 = Left, 2 = Right
+            std::atomic<int> responseSmoothing { 0 }; // 0 = none, 1 = 1/6 octave, 2 = 1/3 octave
         };
 
         UiState uiState;

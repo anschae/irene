@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 5 of 8 (presets).** Loading, blending, filtering, the IR browser with favourites, presets and project recall are in place. The frequency display and export are still to come. See [Roadmap](#roadmap).
+> **Status: milestone 6 of 8 (frequency display).** Everything except "Export as single IR" is in place. See [Roadmap](#roadmap).
 
 ## Download
 
@@ -59,7 +59,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 3. **Basic UI**: slot strips, filter editor, meters, settings page, scaling ← *done*
 4. **IR browser**: favourite folders, favourites, recent, search, instant auditioning ← *done*
 5. **Presets**: save, save as, rename, delete, prev/next, Init, portable presets, missing-file handling ← *done*
-6. Frequency response display
+6. **Frequency response display**: combined wet-path response, per-slot curves, channel and smoothing options ← *done* (draggable EQ handles on the display, a stretch goal, are not implemented)
 7. Export as single IR
 8. Polish and release `v0.1.0`
 
@@ -94,6 +94,17 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Prev/next on a slot** steps through the browser list the IR was picked from. For an IR loaded another way (file dialog, drag from the desktop), it steps through the other IR files in the same folder. Both wrap around.
 - **Scanning** runs on a background thread at low priority. Files whose size and modification time are unchanged are not opened again. Unreadable `.wav`/`.aiff` files are remembered and hidden.
 - **Future-proof file format:** the library file has a version number, and attributes that this version doesn't know (such as tags or ratings written by a later version) are kept when the file is saved.
+
+### Frequency display
+
+- **What it shows:** the magnitude response of the wet path. Each slot's IR (as played: resampled, trimmed, normalised) is combined with its filter block, delay, phase, gain and pan; the slots are added as complex values, so cancellation between slots is visible; then the input and output filter blocks are applied. The dry/wet mix and the output gain are not included.
+- **It matches the audio:** a unit test measures the real engine with an impulse and requires the displayed curve to agree within 0.05 dB on left, right and mid.
+- **Range:** 20 Hz to 20 kHz, +24 to −60 dB, 48 points per octave.
+- **Smoothing** (1/6 or 1/3 octave) averages power and only affects the picture.
+- **The dashed curve** is the filter block selected in the filter editor, on its own, relative to the 0 dB line.
+- **Mute and solo are respected**, so the display shows what you hear. On a mono track the channel selector makes no difference.
+- **Display options** (channel, smoothing, slot curves) are saved with the project.
+- **Not implemented:** dragging EQ band handles directly on the display (listed as a stretch goal in the spec).
 
 ### Presets
 

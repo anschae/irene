@@ -139,6 +139,8 @@ namespace irene
             longestSeconds.store (longest, std::memory_order_relaxed);
         }
 
+        ++buildGenerations[static_cast<size_t> (slot)];
+
         // If the engine rate isn't known yet, setEngineSampleRate() builds later.
         sendChangeMessage();
     }
@@ -327,6 +329,12 @@ namespace irene
         }
 
         return info;
+    }
+
+    double SlotManager::getEngineSampleRate() const
+    {
+        const juce::ScopedLock state (stateLock);
+        return engineRate;
     }
 
     IRSource::Ptr SlotManager::getSource (int slot) const

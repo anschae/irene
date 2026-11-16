@@ -15,6 +15,9 @@ namespace irene
         const juce::Identifier kFilterTab { "filterTab" };
         const juce::Identifier kTargetSlot { "targetSlot" };
         const juce::Identifier kPresetName { "presetName" };
+        const juce::Identifier kShowSlotCurves { "showSlotCurves" };
+        const juce::Identifier kResponseChannel { "responseChannel" };
+        const juce::Identifier kResponseSmoothing { "responseSmoothing" };
 
         ParamRefs makeParamRefs (juce::AudioProcessorValueTreeState& apvts)
         {
@@ -254,6 +257,9 @@ namespace irene
         juce::ValueTree ui { kUiType };
         ui.setProperty (kFilterTab, uiState.filterTab.load(), nullptr);
         ui.setProperty (kTargetSlot, uiState.targetSlot.load(), nullptr);
+        ui.setProperty (kShowSlotCurves, uiState.showSlotCurves.load(), nullptr);
+        ui.setProperty (kResponseChannel, uiState.responseChannel.load(), nullptr);
+        ui.setProperty (kResponseSmoothing, uiState.responseSmoothing.load(), nullptr);
         state.appendChild (ui, nullptr);
         return state;
     }
@@ -269,6 +275,9 @@ namespace irene
         {
             uiState.filterTab = juce::jlimit (0, kNumSlots + 1, static_cast<int> (ui.getProperty (kFilterTab, 0)));
             uiState.targetSlot = juce::jlimit (0, kNumSlots - 1, static_cast<int> (ui.getProperty (kTargetSlot, 0)));
+            uiState.showSlotCurves = static_cast<bool> (ui.getProperty (kShowSlotCurves, true));
+            uiState.responseChannel = juce::jlimit (0, 2, static_cast<int> (ui.getProperty (kResponseChannel, 0)));
+            uiState.responseSmoothing = juce::jlimit (0, 2, static_cast<int> (ui.getProperty (kResponseSmoothing, 0)));
         }
 
         // Only a label: the project state itself is what counts.

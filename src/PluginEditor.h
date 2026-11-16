@@ -7,6 +7,7 @@
 #include "ui/FilterEditor.h"
 #include "ui/GlobalSection.h"
 #include "ui/PresetBar.h"
+#include "ui/ResponseDisplay.h"
 #include "ui/SettingsPanel.h"
 #include "ui/SlotStrip.h"
 #include "ui/Theme.h"
@@ -33,7 +34,8 @@ namespace irene
 
         /** Size of the UI at 100 % (the browser adds to the width when open). */
         static constexpr int kBaseWidth = 1120;
-        static constexpr int kBaseHeight = 504;
+        static constexpr int kBaseHeight = 702;
+        static constexpr int kDisplayHeight = 190;
         static constexpr int kBrowserWidth = 300;
         static constexpr int kGap = 8;
 
@@ -45,6 +47,7 @@ namespace irene
 
         bool isBrowserOpen() const noexcept { return browserOpen; }
         ui::BrowserPanel* getBrowserForTests() noexcept { return &content.browser; }
+        ui::ResponseDisplay* getDisplayForTests() noexcept { return &content.display; }
 
     private:
         /** Everything visible, laid out at 100 % and scaled by the editor. */
@@ -62,6 +65,7 @@ namespace irene
             ui::ConfirmOverlay confirm;
             ui::PresetBar presetBar;
             ui::BrowserPanel browser;
+            ui::ResponseDisplay display;
             ui::FilterEditor filterEditor;
             juce::OwnedArray<ui::SlotStrip> strips;
             ui::GlobalSection globalSection;
