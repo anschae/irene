@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 2 of 8 (DSP core).** The audio engine, IR loading and project state are in place and covered by unit tests, but there is no user interface yet, so IRs can't be loaded from a DAW. See [Roadmap](#roadmap).
+> **Status: milestone 3 of 8 (basic UI).** IRs can be loaded (button or drag and drop), blended and filtered, and everything is saved with the DAW project. The IR browser, presets, the frequency display and export are still to come. See [Roadmap](#roadmap).
 
 ## Download
 
@@ -56,7 +56,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 
 1. **Skeleton**: build system, CI, pass-through plugin ← *done*
 2. **DSP core**: slots, convolution, filter blocks, delay, mix, IR loading, project state ← *done*
-3. Basic UI
+3. **Basic UI**: slot strips, filter editor, meters, settings page, scaling ← *done*
 4. IR browser with favourites
 5. Presets
 6. Frequency response display
@@ -73,6 +73,15 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **pluginval strictness is 10** (the maximum), above the required 5.
 - **Validation on Linux too:** the Linux job builds the VST3 and runs pluginval without GUI tests, as a fast extra check. No Linux binaries are published.
 - **macOS builds are ad-hoc signed, not notarised**, hence the quarantine step above.
+
+### User interface
+
+- **Scaling.** The whole window scales between 75 % and 200 %, either from the settings page or by dragging the bottom-right corner. The size is a global setting.
+- **Global settings** (favourite folders, presets folder, loading defaults, UI scale) live in one XML file in IRene's settings folder and are shared by all instances and DAWs: macOS `~/Library/Application Support/IRene/`, Windows `%APPDATA%\IRene\`.
+- **Dialogs and menus open inside the plugin window** rather than as separate system windows, because those behave differently from host to host.
+- **Each slot has Norm and Trim buttons** in addition to the controls in the spec, to switch loudness normalisation and auto-trim for the IR in that slot.
+- **The selected filter tab and the browser's target slot** are saved with the project (they are not automatable parameters).
+- A developer tool (`-DIRENE_BUILD_TOOLS=ON`, target `IReneSnapshot`) renders the editor to PNG files without a DAW.
 
 ### Sound and signal flow
 

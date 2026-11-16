@@ -86,6 +86,42 @@ namespace irene
         return file.hasFileExtension ("wav;wave;aif;aiff");
     }
 
+    IRFileInfo probeIRFile (const juce::File& file)
+    {
+        IRFileInfo info;
+
+        if (! isSupportedIRFile (file) || ! file.existsAsFile())
+            return info;
+
+        juce::WavAudioFormat wav;
+        juce::AiffAudioFormat aiff;
+        std::array<juce::AudioFormat*, 2> formats { &wav, &aiff };
+
+        if (file.hasFileExtension ("aif;aiff"))
+            std::swap (formats[0], formats[1]);
+
+        for (auto* format : formats)
+        {
+            auto stream = file.createInputStream();
+
+            if (stream == nullptr)
+                return info;
+
+            std::unique_ptr<juce::AudioFormatReader> reader (format->createReaderFor (stream.release(), true));
+
+            if (reader != nullptr && reader->sampleRate > 0.0 && reader->numChannels > 0 && reader->lengthInSamples > 0)
+            {
+                info.valid = true;
+                info.sampleRate = reader->sampleRate;
+                info.numChannels = static_cast<int> (reader->numChannels);
+                info.lengthInSamples = reader->lengthInSamples;
+                return info;
+            }
+        }
+
+        return info;
+    }
+
     IRLoadResult loadIRFile (const juce::File& file)
     {
         if (! file.existsAsFile())

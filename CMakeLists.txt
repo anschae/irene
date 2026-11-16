@@ -35,6 +35,7 @@ set(CMAKE_XCODE_GENERATE_SCHEME OFF)
 
 option(IRENE_BUILD_TESTS "Build the unit test runner" ON)
 option(IRENE_BUILD_PLUGIN "Build the plugin targets (VST3/AU/Standalone)" ON)
+option(IRENE_BUILD_TOOLS "Build developer tools (UI snapshot renderer)" OFF)
 
 # ==============================================================================
 # JUCE
@@ -60,6 +61,20 @@ target_sources(IReneShared INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/GlobalSettings.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/GlobalSettings.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/Theme.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/Theme.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/Widgets.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/Widgets.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SlotStrip.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SlotStrip.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/FilterEditor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/FilterEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/GlobalSection.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/GlobalSection.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsPanel.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Settings.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Parameters.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Parameters.cpp
@@ -90,8 +105,7 @@ target_compile_definitions(IReneShared INTERFACE
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
-    JUCE_REPORT_APP_USAGE=0
-    JUCE_MODAL_LOOPS_PERMITTED=0)
+    JUCE_REPORT_APP_USAGE=0)
 
 target_link_libraries(IReneShared INTERFACE
     juce::juce_audio_utils
@@ -132,6 +146,8 @@ if(IRENE_BUILD_PLUGIN)
 
     target_sources(IRene PRIVATE src/PluginEntry.cpp)
     target_link_libraries(IRene PRIVATE IReneShared)
+    # Plugins must never run modal loops: they would block the host.
+    target_compile_definitions(IRene PUBLIC JUCE_MODAL_LOOPS_PERMITTED=0)
 endif()
 
 # ==============================================================================
@@ -148,9 +164,23 @@ if(IRENE_BUILD_TESTS)
         tests/FilterTests.cpp
         tests/IRProcessingTests.cpp
         tests/EngineTests.cpp
-        tests/ProcessorTests.cpp)
+        tests/ProcessorTests.cpp
+        tests/SettingsAndUiTests.cpp)
 
     target_link_libraries(IReneTests PRIVATE IReneShared)
+    # The tests pump the message loop by hand, which needs this switch.
+    target_compile_definitions(IReneTests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 
     add_test(NAME IReneTests COMMAND IReneTests)
+endif()
+
+# ==============================================================================
+# Developer tools (not built by default)
+# ==============================================================================
+if(IRENE_BUILD_TOOLS)
+    # Renders the editor to a PNG without a DAW: handy for checking layouts.
+    juce_add_console_app(IReneSnapshot PRODUCT_NAME "IReneSnapshot")
+    target_sources(IReneSnapshot PRIVATE tools/Snapshot.cpp)
+    target_link_libraries(IReneSnapshot PRIVATE IReneShared)
+    target_compile_definitions(IReneSnapshot PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 endif()

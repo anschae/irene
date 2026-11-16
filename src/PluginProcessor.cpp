@@ -11,6 +11,9 @@ namespace irene
         const juce::Identifier kStateVersionId { "stateVersion" };
         const juce::Identifier kPluginVersionId { "pluginVersion" };
         const juce::Identifier kParametersType { "Parameters" };
+        const juce::Identifier kUiType { "UI" };
+        const juce::Identifier kFilterTab { "filterTab" };
+        const juce::Identifier kTargetSlot { "targetSlot" };
 
         ParamRefs makeParamRefs (juce::AudioProcessorValueTreeState& apvts)
         {
@@ -28,9 +31,25 @@ namespace irene
           paramRefs (makeParamRefs (apvts)),
           slotManager (engine, paramRefs)
     {
+        applyGlobalSettings();
+        globalSettings->addChangeListener (this);
     }
 
-    IReneProcessor::~IReneProcessor() = default;
+    IReneProcessor::~IReneProcessor()
+    {
+        globalSettings->removeChangeListener (this);
+    }
+
+    void IReneProcessor::changeListenerCallback (juce::ChangeBroadcaster*)
+    {
+        applyGlobalSettings();
+    }
+
+    void IReneProcessor::applyGlobalSettings()
+    {
+        const auto d = globalSettings->get();
+        slotManager.setLoadDefaults (d.defaultNormalise, d.defaultAutoTrim);
+    }
 
     //==============================================================================
     void IReneProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -139,6 +158,11 @@ namespace irene
         state.setProperty (kPluginVersionId, juce::String (kVersionString), nullptr);
         state.appendChild (apvts.copyState(), nullptr);
         state.appendChild (slotManager.toValueTree (embedAudio), nullptr);
+
+        juce::ValueTree ui { kUiType };
+        ui.setProperty (kFilterTab, uiState.filterTab.load(), nullptr);
+        ui.setProperty (kTargetSlot, uiState.targetSlot.load(), nullptr);
+        state.appendChild (ui, nullptr);
         return state;
     }
 
@@ -153,6 +177,12 @@ namespace irene
 
         if (const auto slots = state.getChildWithName (SlotManager::treeType); slots.isValid())
             slotManager.fromValueTree (slots);
+
+        if (const auto ui = state.getChildWithName (kUiType); ui.isValid())
+        {
+            uiState.filterTab = juce::jlimit (0, kNumSlots + 1, static_cast<int> (ui.getProperty (kFilterTab, 0)));
+            uiState.targetSlot = juce::jlimit (0, kNumSlots - 1, static_cast<int> (ui.getProperty (kTargetSlot, 0)));
+        }
     }
 
     void IReneProcessor::getStateInformation (juce::MemoryBlock& destData)

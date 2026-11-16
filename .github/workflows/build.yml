@@ -41,7 +41,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            ninja-build libasound2-dev libx11-dev libxext-dev libxrandr-dev \
+            ninja-build xvfb libasound2-dev libx11-dev libxext-dev libxrandr-dev \
             libxinerama-dev libxcursor-dev libxi-dev libfreetype-dev libfontconfig1-dev \
             libgl1-mesa-dev
 
@@ -66,11 +66,11 @@ jobs:
       - name: Run unit tests
         run: ctest --test-dir build --output-on-failure
 
-      - name: pluginval (VST3, no GUI)
+      - name: pluginval (VST3, with the editor on a virtual display)
         run: |
           curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_Linux.zip"
           unzip -oq pluginval.zip
-          ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --skip-gui-tests \
+          xvfb-run -a ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process \
             --validate "build/${PLUGIN_NAME}_artefacts/$BUILD_TYPE/VST3/$PLUGIN_NAME.vst3"
 
   # ----------------------------------------------------------------------------

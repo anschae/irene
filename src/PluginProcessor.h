@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "Config.h"
+#include "app/GlobalSettings.h"
 #include "dsp/Engine.h"
 #include "ir/SlotManager.h"
 #include "params/Parameters.h"
@@ -10,7 +11,8 @@
 namespace irene
 {
     /** The plugin. Supported bus layouts: mono->mono, mono->stereo, stereo->stereo. */
-    class IReneProcessor final : public juce::AudioProcessor
+    class IReneProcessor final : public juce::AudioProcessor,
+                                 private juce::ChangeListener
     {
     public:
         IReneProcessor();
@@ -60,7 +62,23 @@ namespace irene
 
         static const juce::Identifier stateType;
 
+        //==============================================================================
+        GlobalSettings& getGlobalSettings() noexcept { return *globalSettings; }
+
+        /** Editor state that is saved with the project (not automatable). */
+        struct UiState
+        {
+            std::atomic<int> filterTab { 0 };  // 0 = Input, 1..kNumSlots = slots, last = Output
+            std::atomic<int> targetSlot { 0 }; // the browser's target slot
+        };
+
+        UiState uiState;
+
     private:
+        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void applyGlobalSettings();
+
+        GlobalSettings::Shared globalSettings;
         juce::AudioProcessorValueTreeState apvts;
         ParamRefs paramRefs;
         Engine engine;

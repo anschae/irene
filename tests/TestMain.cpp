@@ -5,6 +5,8 @@
 
 #include <iostream>
 
+#include "app/GlobalSettings.h"
+
 namespace
 {
     class ConsoleRunner final : public juce::UnitTestRunner
@@ -19,6 +21,12 @@ namespace
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // Keep the tests away from the user's real settings, favourites and presets.
+    const auto dataDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                             .getChildFile ("IReneTestData_" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt64()));
+    dataDir.createDirectory();
+    irene::GlobalSettings::setDataDirectoryOverride (dataDir);
 
     ConsoleRunner runner;
     runner.setAssertOnFailure (false);
@@ -35,6 +43,8 @@ int main()
             passes += result->passes;
         }
     }
+
+    dataDir.deleteRecursively();
 
     std::cout << "\n==== " << passes << " checks passed, " << failures << " failed ====" << std::endl;
     return failures == 0 ? 0 : 1;

@@ -65,4 +65,17 @@ namespace irene
     juce::String hashFile (const juce::File& file);
 
     bool isSupportedIRFile (const juce::File& file);
+
+    /** Basic facts about an audio file, read from its header only (fast). */
+    struct IRFileInfo
+    {
+        bool valid = false;
+        double sampleRate = 0.0;
+        int numChannels = 0;
+        juce::int64 lengthInSamples = 0;
+
+        double lengthSeconds() const noexcept { return sampleRate > 0.0 ? static_cast<double> (lengthInSamples) / sampleRate : 0.0; }
+    };
+
+    IRFileInfo probeIRFile (const juce::File& file);
 }
