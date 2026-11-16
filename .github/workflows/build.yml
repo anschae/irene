@@ -269,5 +269,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" $(find dist -type f -name "$PLUGIN_NAME-*.zip") \
-            --repo "$GITHUB_REPOSITORY" --title "$PLUGIN_NAME $GITHUB_REF_NAME" --generate-notes
+          files=$(find dist -type f -name "$PLUGIN_NAME-*.zip")
+
+          # The release may already exist (created on the GitHub website, which is
+          # what pushed the tag): then just attach the builds to it.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" $files --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" $files \
+              --repo "$GITHUB_REPOSITORY" --title "$PLUGIN_NAME $GITHUB_REF_NAME" --generate-notes
+          fi

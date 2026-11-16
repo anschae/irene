@@ -43,14 +43,23 @@ All builds are made by GitHub Actions; you don't need any developer tools.
 
 ## Making a release
 
-Push a tag that starts with `v`:
+A release is made by creating a tag that starts with `v` (for example `v0.1.0`). GitHub Actions then builds everything, runs the checks and attaches `IRene-macOS.zip` and `IRene-Windows.zip` to the release. This takes about 20 minutes.
+
+**On the GitHub website (no tools needed):**
+
+1. Open the repository and click **Releases** (right-hand side), then **Draft a new release**.
+2. Click **Choose a tag**, type the new tag name, e.g. `v0.1.0`, and click **Create new tag: v0.1.0 on publish**.
+3. Give it a title, e.g. `IRene v0.1.0`, and click **Publish release**.
+4. Wait for the run in the **Actions** tab to finish. The two zips then appear under the release's **Assets**.
+
+**With git:**
 
 ```sh
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-GitHub Actions then builds everything, runs the checks and creates a GitHub Release with both zips attached. You can also create the tag on the GitHub website (*Releases → Draft a new release → Choose a tag → type the new tag name*); publishing that page pushes the tag and starts the build.
+To change the version number shown in the plugin, edit `IRENE_VERSION` at the top of `CMakeLists.txt` before tagging.
 
 ## Roadmap
 
