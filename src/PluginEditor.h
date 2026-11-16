@@ -4,6 +4,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/BrowserPanel.h"
+#include "ui/ExportPanel.h"
 #include "ui/FilterEditor.h"
 #include "ui/GlobalSection.h"
 #include "ui/PresetBar.h"
@@ -48,6 +49,7 @@ namespace irene
         bool isBrowserOpen() const noexcept { return browserOpen; }
         ui::BrowserPanel* getBrowserForTests() noexcept { return &content.browser; }
         ui::ResponseDisplay* getDisplayForTests() noexcept { return &content.display; }
+        ui::ExportPanel* getExportPanelForTests() noexcept { return &content.exportPanel; }
 
     private:
         /** Everything visible, laid out at 100 % and scaled by the editor. */
@@ -61,7 +63,7 @@ namespace irene
 
             IReneEditor& editor;
             juce::Label title, version;
-            juce::TextButton settingsButton { "Settings" }, browserButton { "Browser" };
+            juce::TextButton settingsButton { "Settings" }, browserButton { "Browser" }, exportButton { "Export IR..." };
             ui::ConfirmOverlay confirm;
             ui::PresetBar presetBar;
             ui::BrowserPanel browser;
@@ -70,6 +72,7 @@ namespace irene
             juce::OwnedArray<ui::SlotStrip> strips;
             ui::GlobalSection globalSection;
             ui::SettingsPanel settingsPanel;
+            ui::ExportPanel exportPanel;
         };
 
         void changeListenerCallback (juce::ChangeBroadcaster*) override;

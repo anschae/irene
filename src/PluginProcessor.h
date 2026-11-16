@@ -6,6 +6,7 @@
 #include "app/GlobalSettings.h"
 #include "app/PresetManager.h"
 #include "dsp/Engine.h"
+#include "export/Exporter.h"
 #include "ir/SlotManager.h"
 #include "library/IRLibrary.h"
 #include "params/Parameters.h"
@@ -107,6 +108,10 @@ namespace irene
         };
 
         BrowserState browserState;
+
+        /** "Export as single IR" options used last in this instance. Message thread. */
+        ExportOptions exportOptions;
+        juce::File lastExportFolder;
 
         /** Remembers the list a slot's IR was picked from (full paths), for the
             slot's prev/next buttons. Message thread. */

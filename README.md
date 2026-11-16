@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 6 of 8 (frequency display).** Everything except "Export as single IR" is in place. See [Roadmap](#roadmap).
+> **Status: milestone 7 of 8.** All features of version 0.1 are implemented and tested on Linux. The macOS and Windows builds have not run yet (see [Known gaps](#known-gaps)).
 
 ## Download
 
@@ -60,7 +60,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 4. **IR browser**: favourite folders, favourites, recent, search, instant auditioning ← *done*
 5. **Presets**: save, save as, rename, delete, prev/next, Init, portable presets, missing-file handling ← *done*
 6. **Frequency response display**: combined wet-path response, per-slot curves, channel and smoothing options ← *done* (draggable EQ handles on the display, a stretch goal, are not implemented)
-7. Export as single IR
+7. **Export as single IR**, with the equivalence test ← *done*
 8. Polish and release `v0.1.0`
 
 ## Design decisions
@@ -106,6 +106,16 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Display options** (channel, smoothing, slot curves) are saved with the project.
 - **Not implemented:** dragging EQ band handles directly on the display (listed as a stretch goal in the spec).
 
+### Export as single IR
+
+- **How it is rendered:** a separate, private copy of the audio engine is fed a single impulse, offline, on a background thread. It runs the same DSP code as the plugin, so the exported IR reproduces the wet path: in the unit test, noise through the plugin and the same noise convolved with the exported IR differ by about −90 dB (the requirement was −60 dB).
+- **Mono export** is what the plugin produces on a mono track: pan is ignored and stereo IRs are summed.
+- **Sample rate:** every IR is converted from its original file straight to the export rate, not via the session rate.
+- **Auto length** ends the IR where the tail has dropped 90 dB below the peak, looking at up to 3 seconds beyond the longest IR (filters ring on), at most 12 seconds in total. A 5 ms fade-out is always applied.
+- **24-bit files and overs:** if the IR peaks above 0 dBFS, a 24-bit export is refused with a message rather than written clipped. Use peak normalisation or 32-bit float.
+- **Cancel** stops the render; nothing is written. Files are written via a temporary file.
+- **Export options** are remembered per plugin instance while it is open, not saved with the project.
+
 ### Presets
 
 - **One file per preset** (`.irenepreset`) in the presets folder. The default folder is `Presets` inside IRene's settings folder; it can be changed in Settings.
@@ -136,6 +146,13 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Auto-trim** removes leading audio that is more than 60 dB below the IR's peak, keeping 2 samples of pre-roll. It is off by default.
 - **Project state** embeds each IR's original audio as losslessly compressed 32-bit float, together with its path, name and content hash.
 - **Content hash** is a 64-bit FNV-1a hash of the file's bytes plus the file size. It is meant to recognise moved or renamed files, not for security.
+
+## Known gaps
+
+- **Not yet built on macOS or Windows.** Everything so far was compiled and tested on Linux only (unit tests, and pluginval at strictness 10 including its editor tests). The GitHub Actions workflow for macOS (universal VST3/AU/Standalone, signing, pluginval, auval) and Windows (VST3/Standalone, pluginval) is written but has never run.
+- **Not yet tried in Cubase or Logic.** In particular, keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host.
+- **Draggable EQ handles on the display** (a stretch goal) are not implemented.
+- **CPU:** the engine always processes in stereo, also for a mono source with mono IRs.
 
 ## For developers
 

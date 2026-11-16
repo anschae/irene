@@ -29,6 +29,9 @@ namespace
     {
         for (auto* child : root.getChildren())
         {
+            if (! child->isVisible())
+                continue;
+
             if (auto* button = dynamic_cast<juce::Button*> (child); button != nullptr && button->getButtonText() == text && button->isVisible())
                 return button;
 
@@ -148,6 +151,19 @@ int main (int argc, char* argv[])
         settings->triggerClick();
         pumpMessages (150);
         ok = save (*editor, out.getChildFile ("settings.png")) && ok;
+
+        if (auto* close = findButton (*editor, "Close"))
+        {
+            close->triggerClick();
+            pumpMessages (100);
+        }
+    }
+
+    if (auto* exportButton = findButton (*editor, "Export IR..."))
+    {
+        exportButton->triggerClick();
+        pumpMessages (150);
+        ok = save (*editor, out.getChildFile ("export.png")) && ok;
 
         if (auto* close = findButton (*editor, "Close"))
         {

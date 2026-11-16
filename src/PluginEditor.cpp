@@ -6,7 +6,7 @@ namespace irene
 
     //==============================================================================
     IReneEditor::Content::Content (IReneEditor& e, IReneProcessor& p)
-        : editor (e), presetBar (p, confirm), browser (p), display (p), filterEditor (p), globalSection (p)
+        : editor (e), presetBar (p, confirm), browser (p), display (p), filterEditor (p), globalSection (p), exportPanel (p)
     {
         setComponentID (kContentComponentId);
 
@@ -45,6 +45,17 @@ namespace irene
         addChildComponent (settingsPanel);
         settingsPanel.onClose = [this] { settingsPanel.setVisible (false); };
 
+        exportButton.setTooltip ("Render the current setup into a single impulse response file");
+        exportButton.onClick = [this]
+        {
+            exportPanel.setVisible (true);
+            exportPanel.toFront (true);
+        };
+        addAndMakeVisible (exportButton);
+
+        addChildComponent (exportPanel);
+        exportPanel.onClose = [this] { exportPanel.setVisible (false); };
+
         addChildComponent (confirm);
     }
 
@@ -63,6 +74,8 @@ namespace irene
         settingsButton.setBounds (header.removeFromRight (90).reduced (0, 2));
         header.removeFromRight (6);
         browserButton.setBounds (header.removeFromRight (90).reduced (0, 2));
+        header.removeFromRight (6);
+        exportButton.setBounds (header.removeFromRight (96).reduced (0, 2));
         header.removeFromLeft (20);
         header.removeFromRight (20);
         presetBar.setBounds (header.removeFromLeft (juce::jmin (header.getWidth(), 520)).reduced (0, 2));
@@ -95,6 +108,7 @@ namespace irene
         }
 
         settingsPanel.setBounds (getLocalBounds());
+        exportPanel.setBounds (getLocalBounds());
         confirm.setBounds (getLocalBounds());
     }
 
