@@ -1,6 +1,6 @@
 // Developer tool: renders the plugin editor to PNG files, without a DAW.
 //
-//   IReneSnapshot <output-folder> [ir-file ...]
+//   IReneSnapshot <output-folder> [ir-file | favourite-folder ...]
 //
 // Build with -DIRENE_BUILD_TOOLS=ON. On Linux without a display, run it under
 // xvfb-run.
@@ -67,13 +67,35 @@ int main (int argc, char* argv[])
     // Never touch the real user settings.
     irene::GlobalSettings::setDataDirectoryOverride (out.getChildFile ("data"));
 
+    // Arguments: folders become favourite folders, files are loaded into the slots.
+    juce::StringArray folders;
+    juce::Array<juce::File> files;
+
+    for (int i = 2; i < argc; ++i)
+    {
+        const auto item = juce::File::getCurrentWorkingDirectory().getChildFile (juce::String (argv[i]));
+
+        if (item.isDirectory())
+            folders.add (item.getFullPathName());
+        else
+            files.add (item);
+    }
+
+    {
+        irene::GlobalSettings::Shared settings;
+        settings->update ([&] (auto& d) { d.favouriteFolders = folders; d.browserOpen = true; d.uiScale = 1.0f; });
+    }
+
     irene::IReneProcessor processor;
     processor.prepareToPlay (48000.0, 512);
+    pumpMessages (100);
+    processor.getLibrary().waitForScan();
 
-    for (int i = 2; i < argc && i - 2 < irene::kNumSlots; ++i)
-        processor.getSlots().loadFile (i - 2, juce::File::getCurrentWorkingDirectory().getChildFile (juce::String (argv[i])));
+    for (int i = 0; i < files.size() && i < irene::kNumSlots; ++i)
+        processor.getSlots().loadFile (i, files[i]);
 
     processor.getSlots().waitForPendingLoads();
+    pumpMessages (100);
 
     // Feed some audio so that the meters show something.
     {

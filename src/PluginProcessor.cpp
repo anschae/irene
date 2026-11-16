@@ -31,6 +31,11 @@ namespace irene
           paramRefs (makeParamRefs (apvts)),
           slotManager (engine, paramRefs)
     {
+        // Moved or renamed files are found again through the library's index.
+        // (The library is shared and outlives the slot manager's thread.)
+        slotManager.fileResolver = [lib = library] (const IRReference& ref) { return lib->resolve (ref); };
+        slotManager.onFileLoaded = [lib = library] (int, const IRSource& source) { lib->addRecent (IRFileEntry::fromSource (source)); };
+
         applyGlobalSettings();
         globalSettings->addChangeListener (this);
     }
@@ -148,6 +153,49 @@ namespace irene
         }
 
         slotManager.swap (slotA, slotB);
+        std::swap (slotListContexts[static_cast<size_t> (slotA)], slotListContexts[static_cast<size_t> (slotB)]);
+    }
+
+    void IReneProcessor::setSlotListContext (int slot, const juce::StringArray& paths)
+    {
+        slotListContexts[static_cast<size_t> (slot)] = paths;
+    }
+
+    juce::File IReneProcessor::getAdjacentFile (int slot, int direction)
+    {
+        auto& context = slotListContexts[static_cast<size_t> (slot)];
+        const auto current = slotManager.getInfo (slot).reference.path;
+
+        if (current.isNotEmpty() && ! context.contains (current))
+        {
+            // Not from a browser list (or the list is stale): use the IR's own folder.
+            context.clear();
+
+            if (juce::File::isAbsolutePath (current))
+            {
+                for (const auto& f : juce::File (current).getParentDirectory().findChildFiles (juce::File::findFiles, false))
+                    if (isSupportedIRFile (f) && ! f.isHidden())
+                        context.add (f.getFullPathName());
+
+                context.sortNatural();
+            }
+        }
+
+        if (context.isEmpty())
+            return {};
+
+        const auto n = context.size();
+        auto index = context.indexOf (current);
+
+        if (index < 0)
+            index = direction > 0 ? -1 : 0; // empty slot: start at the first / last entry
+
+        const auto next = ((index + direction) % n + n) % n;
+
+        if (context[next] == current)
+            return {};
+
+        return juce::File (context[next]);
     }
 
     //==============================================================================

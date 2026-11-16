@@ -383,6 +383,9 @@ namespace irene
                             }
 
                             installSource (job.slot, result.source, normalise, autoTrim);
+
+                            if (onFileLoaded != nullptr)
+                                onFileLoaded (job.slot, *result.source);
                         }
                         else
                         {

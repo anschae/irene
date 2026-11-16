@@ -6,7 +6,7 @@ namespace irene
 
     //==============================================================================
     IReneEditor::Content::Content (IReneEditor& e, IReneProcessor& p)
-        : editor (e), filterEditor (p), globalSection (p)
+        : editor (e), browser (p), filterEditor (p), globalSection (p)
     {
         setComponentID (kContentComponentId);
 
@@ -26,6 +26,13 @@ namespace irene
             settingsPanel.toFront (true);
         };
         addAndMakeVisible (settingsButton);
+
+        browserButton.setClickingTogglesState (true);
+        browserButton.setTooltip ("Show or hide the IR browser");
+        addAndMakeVisible (browserButton);
+        addAndMakeVisible (browser);
+
+        browser.onOpenSettings = [this] { settingsButton.triggerClick(); };
 
         addAndMakeVisible (filterEditor);
         addAndMakeVisible (globalSection);
@@ -52,7 +59,17 @@ namespace irene
         title.setBounds (header.removeFromLeft (74));
         version.setBounds (header.removeFromLeft (60).withTrimmedBottom (5));
         settingsButton.setBounds (header.removeFromRight (90).reduced (0, 2));
+        header.removeFromRight (6);
+        browserButton.setBounds (header.removeFromRight (90).reduced (0, 2));
         area.removeFromTop (8);
+
+        browser.setVisible (editor.isBrowserOpen());
+
+        if (editor.isBrowserOpen())
+        {
+            browser.setBounds (area.removeFromLeft (kBrowserWidth));
+            area.removeFromLeft (kGap);
+        }
 
         globalSection.setBounds (area.removeFromRight (130));
         area.removeFromRight (8);
@@ -85,30 +102,47 @@ namespace irene
         {
             auto* strip = content.strips[i];
             strip->onBrowse = [this, i] { browseForFile (i); };
-            strip->onFileChosen = [this, i] (const juce::File& f) { requestLoad (i, f); };
+            strip->onFileChosen = [this, i] (const juce::File& f) { loadFromList (i, f); };
             strip->onSelected = [this, i] { selectTargetSlot (i); };
-            strip->setBrowserControlsVisible (false); // arrive with the IR browser
+            strip->onStep = [this, i] (int direction) { stepSlot (i, direction); };
+            strip->onToggleFavourite = [this, i] { toggleSlotFavourite (i); };
         }
+
+        content.browser.onFileChosen = [this] (const juce::File& file, const juce::StringArray& list)
+        {
+            const auto target = plugin.uiState.targetSlot.load();
+            plugin.setSlotListContext (target, list);
+            requestLoad (target, file);
+        };
+
+        content.browserButton.onClick = [this]
+        {
+            const auto open = content.browserButton.getToggleState();
+            plugin.getGlobalSettings().update ([open] (auto& d) { d.browserOpen = open; });
+        };
 
         content.filterEditor.selectTab (plugin.uiState.filterTab.load());
         content.filterEditor.onTabChanged = [this] (int tab) { plugin.uiState.filterTab = tab; };
         selectTargetSlot (plugin.uiState.targetSlot.load());
 
         setResizable (true, true);
-        getConstrainer()->setFixedAspectRatio (static_cast<double> (kBaseWidth) / kBaseHeight);
-        setResizeLimits (juce::roundToInt (kBaseWidth * GlobalSettings::kMinUiScale),
-                         juce::roundToInt (kBaseHeight * GlobalSettings::kMinUiScale),
-                         juce::roundToInt (kBaseWidth * GlobalSettings::kMaxUiScale),
-                         juce::roundToInt (kBaseHeight * GlobalSettings::kMaxUiScale));
 
         plugin.getGlobalSettings().addChangeListener (this);
+        plugin.getLibrary().addChangeListener (this);
+        plugin.getSlots().addChangeListener (this);
+
+        browserOpen = plugin.getGlobalSettings().get().browserOpen;
+        content.browserButton.setToggleState (browserOpen, juce::dontSendNotification);
         applyScale (plugin.getGlobalSettings().get().uiScale);
+        refreshStrips();
         constructed = true;
     }
 
     IReneEditor::~IReneEditor()
     {
         stopTimer();
+        plugin.getSlots().removeChangeListener (this);
+        plugin.getLibrary().removeChangeListener (this);
         plugin.getGlobalSettings().removeChangeListener (this);
         tooltips.setLookAndFeel (nullptr);
         setLookAndFeel (nullptr);
@@ -124,7 +158,15 @@ namespace irene
         scale = juce::jlimit (GlobalSettings::kMinUiScale, GlobalSettings::kMaxUiScale, scale);
         const juce::ScopedValueSetter<bool> guard (applyingScale, true);
         currentScale = scale;
-        setSize (juce::roundToInt (kBaseWidth * scale), juce::roundToInt (kBaseHeight * scale));
+
+        const auto baseWidth = getBaseWidth();
+        getConstrainer()->setFixedAspectRatio (static_cast<double> (baseWidth) / kBaseHeight);
+        setResizeLimits (juce::roundToInt (static_cast<float> (baseWidth) * GlobalSettings::kMinUiScale),
+                         juce::roundToInt (kBaseHeight * GlobalSettings::kMinUiScale),
+                         juce::roundToInt (static_cast<float> (baseWidth) * GlobalSettings::kMaxUiScale),
+                         juce::roundToInt (kBaseHeight * GlobalSettings::kMaxUiScale));
+
+        setSize (juce::roundToInt (static_cast<float> (baseWidth) * scale), juce::roundToInt (kBaseHeight * scale));
         resized();
     }
 
@@ -132,10 +174,11 @@ namespace irene
     {
         // The window may have been resized by dragging its corner: derive the
         // scale from the new width (the aspect ratio is fixed).
-        const auto scale = static_cast<float> (getWidth()) / static_cast<float> (kBaseWidth);
+        const auto scale = static_cast<float> (getWidth()) / static_cast<float> (getBaseWidth());
 
         content.setTransform (juce::AffineTransform::scale (scale));
-        content.setBounds (0, 0, kBaseWidth, kBaseHeight);
+        content.setBounds (0, 0, getBaseWidth(), kBaseHeight);
+        content.resized();
 
         if (constructed && ! applyingScale && getWidth() > 0 && std::abs (scale - currentScale) > 0.001f)
         {
@@ -151,12 +194,65 @@ namespace irene
         plugin.getGlobalSettings().update ([scale] (auto& d) { d.uiScale = scale; });
     }
 
-    void IReneEditor::changeListenerCallback (juce::ChangeBroadcaster*)
+    void IReneEditor::changeListenerCallback (juce::ChangeBroadcaster* source)
     {
-        const auto wanted = plugin.getGlobalSettings().get().uiScale;
+        if (source == &plugin.getGlobalSettings())
+            applyGlobalSettings();
+        else
+            refreshStrips();
+    }
 
-        if (std::abs (wanted - currentScale) > 0.001f && ! isTimerRunning())
-            applyScale (wanted);
+    void IReneEditor::applyGlobalSettings()
+    {
+        const auto d = plugin.getGlobalSettings().get();
+        const auto browserChanged = d.browserOpen != browserOpen;
+
+        browserOpen = d.browserOpen;
+        content.browserButton.setToggleState (browserOpen, juce::dontSendNotification);
+
+        if (browserChanged || (std::abs (d.uiScale - currentScale) > 0.001f && ! isTimerRunning()))
+            applyScale (browserChanged ? currentScale : d.uiScale);
+    }
+
+    void IReneEditor::refreshStrips()
+    {
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            const auto info = plugin.getSlots().getInfo (i);
+            content.strips[i]->setFavourite (info.status == SlotInfo::Status::ready && plugin.getLibrary().isFavourite (info.reference.hash));
+            content.strips[i]->setStepEnabled (info.status == SlotInfo::Status::ready);
+        }
+    }
+
+    void IReneEditor::loadFromList (int slot, const juce::File& file)
+    {
+        // Dropped onto a slot: if the file is in the browser's current list,
+        // prev/next will step through that list; otherwise through its folder.
+        const auto list = content.browser.getCurrentFileList();
+        plugin.setSlotListContext (slot, list.contains (file.getFullPathName()) ? list : juce::StringArray());
+        requestLoad (slot, file);
+    }
+
+    void IReneEditor::stepSlot (int slot, int direction)
+    {
+        const auto file = plugin.getAdjacentFile (slot, direction);
+
+        if (file == juce::File())
+            return;
+
+        requestLoad (slot, file);
+
+        if (slot == plugin.uiState.targetSlot.load())
+            content.browser.showAsCurrent (file.getFullPathName());
+    }
+
+    void IReneEditor::toggleSlotFavourite (int slot)
+    {
+        if (const auto source = plugin.getSlots().getSource (slot))
+        {
+            const auto entry = IRFileEntry::fromSource (*source);
+            plugin.getLibrary().setFavourite (entry, ! plugin.getLibrary().isFavourite (entry.hash));
+        }
     }
 
     //==============================================================================

@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: milestone 3 of 8 (basic UI).** IRs can be loaded (button or drag and drop), blended and filtered, and everything is saved with the DAW project. The IR browser, presets, the frequency display and export are still to come. See [Roadmap](#roadmap).
+> **Status: milestone 4 of 8 (IR browser).** Loading, blending, filtering, the IR browser with favourites, and project recall are in place. Presets, the frequency display and export are still to come. See [Roadmap](#roadmap).
 
 ## Download
 
@@ -57,7 +57,7 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 1. **Skeleton**: build system, CI, pass-through plugin ← *done*
 2. **DSP core**: slots, convolution, filter blocks, delay, mix, IR loading, project state ← *done*
 3. **Basic UI**: slot strips, filter editor, meters, settings page, scaling ← *done*
-4. IR browser with favourites
+4. **IR browser**: favourite folders, favourites, recent, search, instant auditioning ← *done*
 5. Presets
 6. Frequency response display
 7. Export as single IR
@@ -82,6 +82,18 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 - **Each slot has Norm and Trim buttons** in addition to the controls in the spec, to switch loudness normalisation and auto-trim for the IR in that slot.
 - **The selected filter tab and the browser's target slot** are saved with the project (they are not automatable parameters).
 - A developer tool (`-DIRENE_BUILD_TOOLS=ON`, target `IReneSnapshot`) renders the editor to PNG files without a DAW.
+
+### IR browser and library
+
+- **Favourites, recent IRs and the scan index are global.** They live in IRene's settings folder (`library.xml`, `index.bin`) and are shared by all instances in a DAW at once; changes made in another DAW show up within about 1.5 seconds.
+- **IRs are identified by content hash plus last known path.** If a starred file is moved or renamed inside a favourite folder, the star follows it after the next scan. A *copy* of a starred file doesn't take the star away from the original.
+- **The browser only shows folders that contain IRs**, and never leaves the favourite folders. Empty folders are hidden.
+- **Search and "★ only" also look into subfolders**, so nothing is hidden one level down.
+- **"Recent" is sorted by time** (newest first); all other views sort by name, with numbers in natural order.
+- **Clicking a file loads it on mouse-up**, so a file can be dragged onto another slot without first loading it into the target slot.
+- **Prev/next on a slot** steps through the browser list the IR was picked from. For an IR loaded another way (file dialog, drag from the desktop), it steps through the other IR files in the same folder. Both wrap around.
+- **Scanning** runs on a background thread at low priority. Files whose size and modification time are unchanged are not opened again. Unreadable `.wav`/`.aiff` files are remembered and hidden.
+- **Future-proof file format:** the library file has a version number, and attributes that this version doesn't know (such as tags or ratings written by a later version) are kept when the file is saved.
 
 ### Sound and signal flow
 

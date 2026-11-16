@@ -152,7 +152,11 @@ namespace
                     return;
 
                 pumpMessages();
-                expectEquals (editor->getWidth(), IReneEditor::kBaseWidth);
+                auto* irene = dynamic_cast<IReneEditor*> (editor.get());
+                expect (irene != nullptr && irene->isBrowserOpen());
+                const auto baseWidth = irene != nullptr ? irene->getBaseWidth() : 0;
+                expectEquals (baseWidth, IReneEditor::kBaseWidth + IReneEditor::kBrowserWidth + IReneEditor::kGap);
+                expectEquals (editor->getWidth(), baseWidth);
                 expectEquals (editor->getHeight(), IReneEditor::kBaseHeight);
 
                 auto image = editor->createComponentSnapshot (editor->getLocalBounds());
@@ -161,15 +165,21 @@ namespace
                 // The UI scale setting resizes the window
                 settings->update ([] (auto& s) { s.uiScale = 1.5f; });
                 pumpMessages();
-                expectEquals (editor->getWidth(), juce::roundToInt (IReneEditor::kBaseWidth * 1.5f));
+                expectEquals (editor->getWidth(), juce::roundToInt (static_cast<float> (baseWidth) * 1.5f));
                 expectEquals (editor->getHeight(), juce::roundToInt (IReneEditor::kBaseHeight * 1.5f));
                 image = editor->createComponentSnapshot (editor->getLocalBounds());
                 expect (drawnFraction (image) > 0.05);
 
                 // Resizing the window (host or corner drag) is remembered as the scale
-                editor->setSize (juce::roundToInt (IReneEditor::kBaseWidth * 1.25f), juce::roundToInt (IReneEditor::kBaseHeight * 1.25f));
+                editor->setSize (juce::roundToInt (static_cast<float> (baseWidth) * 1.25f), juce::roundToInt (IReneEditor::kBaseHeight * 1.25f));
                 pumpMessages (600);
                 expectWithinAbsoluteError (settings->get().uiScale, 1.25f, 0.01f);
+
+                // Closing the browser makes the window narrower at the same scale
+                settings->update ([] (auto& s) { s.browserOpen = false; });
+                pumpMessages();
+                expectEquals (editor->getWidth(), juce::roundToInt (IReneEditor::kBaseWidth * 1.25f));
+                editor->createComponentSnapshot (editor->getLocalBounds());
 
                 // Parameter changes while the editor is open
                 for (const auto* id : { "slot1_gain", "slot2_pan", "in_hp_on", "out_mid_gain", "mix" })

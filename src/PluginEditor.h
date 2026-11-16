@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
+#include "ui/BrowserPanel.h"
 #include "ui/FilterEditor.h"
 #include "ui/GlobalSection.h"
 #include "ui/SettingsPanel.h"
@@ -29,13 +30,20 @@ namespace irene
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        /** Size of the UI at 100 %. */
+        /** Size of the UI at 100 % (the browser adds to the width when open). */
         static constexpr int kBaseWidth = 1120;
         static constexpr int kBaseHeight = 504;
+        static constexpr int kBrowserWidth = 300;
+        static constexpr int kGap = 8;
+
+        int getBaseWidth() const noexcept { return kBaseWidth + (browserOpen ? kBrowserWidth + kGap : 0); }
 
         /** Loads a file into a slot, asking first if the "ask before resampling"
             setting is on and the sample rates differ. */
         void requestLoad (int slot, const juce::File& file);
+
+        bool isBrowserOpen() const noexcept { return browserOpen; }
+        ui::BrowserPanel* getBrowserForTests() noexcept { return &content.browser; }
 
     private:
         /** Everything visible, laid out at 100 % and scaled by the editor. */
@@ -49,7 +57,8 @@ namespace irene
 
             IReneEditor& editor;
             juce::Label title, version;
-            juce::TextButton settingsButton { "Settings" };
+            juce::TextButton settingsButton { "Settings" }, browserButton { "Browser" };
+            ui::BrowserPanel browser;
             ui::FilterEditor filterEditor;
             juce::OwnedArray<ui::SlotStrip> strips;
             ui::GlobalSection globalSection;
@@ -60,8 +69,13 @@ namespace irene
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void timerCallback() override;
         void applyScale (float scale);
+        void applyGlobalSettings();
         void browseForFile (int slot);
         void selectTargetSlot (int slot);
+        void loadFromList (int slot, const juce::File& file);
+        void stepSlot (int slot, int direction);
+        void toggleSlotFavourite (int slot);
+        void refreshStrips();
 
         IReneProcessor& plugin;
         ui::IReneLookAndFeel lookAndFeel;
@@ -70,7 +84,7 @@ namespace irene
         std::unique_ptr<juce::FileChooser> chooser;
         juce::File lastBrowseFolder;
         float currentScale = 1.0f;
-        bool applyingScale = false, constructed = false;
+        bool applyingScale = false, constructed = false, browserOpen = true;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IReneEditor)
     };

@@ -6,6 +6,7 @@
 #include "app/GlobalSettings.h"
 #include "dsp/Engine.h"
 #include "ir/SlotManager.h"
+#include "library/IRLibrary.h"
 #include "params/Parameters.h"
 
 namespace irene
@@ -74,11 +75,40 @@ namespace irene
 
         UiState uiState;
 
+        //==============================================================================
+        IRLibrary& getLibrary() noexcept { return *library; }
+
+        /** Where the browser is, kept here so it survives closing the editor.
+            Message thread only; not saved with the project. */
+        struct BrowserState
+        {
+            enum class Location { allFavourites, recent, folder };
+
+            bool initialised = false;
+            Location location = Location::allFavourites;
+            juce::String rootFolder, currentFolder; // for Location::folder
+            bool includeSubfolders = false, starredOnly = false, sortForwards = true;
+            juce::String search;
+        };
+
+        BrowserState browserState;
+
+        /** Remembers the list a slot's IR was picked from (full paths), for the
+            slot's prev/next buttons. Message thread. */
+        void setSlotListContext (int slot, const juce::StringArray& paths);
+
+        /** The file before/after the slot's current IR in its list. Without a
+            list, the other IR files in the same folder are used. Returns an
+            invalid File if there is nothing to step to. Message thread. */
+        juce::File getAdjacentFile (int slot, int direction);
+
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void applyGlobalSettings();
 
         GlobalSettings::Shared globalSettings;
+        IRLibrary::Shared library;
+        std::array<juce::StringArray, kNumSlots> slotListContexts;
         juce::AudioProcessorValueTreeState apvts;
         ParamRefs paramRefs;
         Engine engine;

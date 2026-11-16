@@ -106,6 +106,10 @@ namespace irene
             if nothing matches. Set once, before the manager is used. */
         std::function<juce::File (const IRReference&)> fileResolver;
 
+        /** Optional: called on the loader thread after a file was loaded into a
+            slot by loadFile(). Set once, before the manager is used. */
+        std::function<void (int slot, const IRSource&)> onFileLoaded;
+
         static const juce::Identifier treeType;
 
     private:
