@@ -1,0 +1,273 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+env:
+  PLUGIN_NAME: IRene
+  # AU identifiers for auval: type, plugin code, manufacturer code (see CMakeLists.txt)
+  AU_TYPE: aufx
+  AU_SUBTYPE: IRne
+  AU_MANUFACTURER: Ansc
+  PLUGINVAL_VERSION: v1.0.4
+  PLUGINVAL_STRICTNESS: 10
+  BUILD_TYPE: Release
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ----------------------------------------------------------------------------
+  linux:
+    name: Linux (unit tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build libasound2-dev libx11-dev libxext-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libfreetype-dev libfontconfig1-dev \
+            libgl1-mesa-dev
+
+      - name: Read JUCE version
+        id: juce
+        run: echo "tag=$(sed -nE 's/^set\(IRENE_JUCE_TAG +"([^"]+)".*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache JUCE download
+        uses: actions/cache@v6
+        with:
+          path: |
+            .deps/juce-src
+            .deps/juce-subbuild
+          key: juce-${{ runner.os }}-${{ steps.juce.outputs.tag }}
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+      - name: Build tests and VST3
+        run: cmake --build build --target IReneTests IRene_VST3 --parallel
+
+      - name: Run unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: pluginval (VST3, no GUI)
+        run: |
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_Linux.zip"
+          unzip -oq pluginval.zip
+          ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --skip-gui-tests \
+            --validate "build/${PLUGIN_NAME}_artefacts/$BUILD_TYPE/VST3/$PLUGIN_NAME.vst3"
+
+  # ----------------------------------------------------------------------------
+  macos:
+    name: macOS (universal VST3 + AU + Standalone)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read JUCE version
+        id: juce
+        run: echo "tag=$(sed -nE 's/^set\(IRENE_JUCE_TAG +"([^"]+)".*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache JUCE download
+        uses: actions/cache@v6
+        with:
+          path: |
+            .deps/juce-src
+            .deps/juce-subbuild
+          key: juce-${{ runner.os }}-${{ steps.juce.outputs.tag }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+      - name: Build
+        run: cmake --build build --config $BUILD_TYPE --parallel $(sysctl -n hw.ncpu)
+
+      - name: Run unit tests
+        run: ctest --test-dir build -C $BUILD_TYPE --output-on-failure
+
+      - name: Collect bundles
+        run: |
+          ART="build/${PLUGIN_NAME}_artefacts/$BUILD_TYPE"
+          mkdir -p "dist/$PLUGIN_NAME-macOS"
+          cp -R "$ART/VST3/$PLUGIN_NAME.vst3" "$ART/AU/$PLUGIN_NAME.component" "$ART/Standalone/$PLUGIN_NAME.app" "dist/$PLUGIN_NAME-macOS/"
+
+      - name: Check that all binaries are universal
+        run: |
+          cd "dist/$PLUGIN_NAME-macOS"
+          for bin in "$PLUGIN_NAME.vst3" "$PLUGIN_NAME.component" "$PLUGIN_NAME.app"; do
+            archs=$(lipo -archs "$bin/Contents/MacOS/$PLUGIN_NAME")
+            echo "$bin: $archs"
+            [[ "$archs" == *arm64* && "$archs" == *x86_64* ]]
+          done
+
+      - name: Ad-hoc code sign
+        run: |
+          cd "dist/$PLUGIN_NAME-macOS"
+          for bundle in "$PLUGIN_NAME.vst3" "$PLUGIN_NAME.component" "$PLUGIN_NAME.app"; do
+            codesign --force --deep -s - "$bundle"
+            codesign --verify --deep --strict --verbose=2 "$bundle"
+          done
+
+      - name: pluginval (VST3)
+        run: |
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_macOS.zip"
+          unzip -oq pluginval.zip
+          pluginval.app/Contents/MacOS/pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process \
+            --output-dir pluginval-logs --validate "dist/$PLUGIN_NAME-macOS/$PLUGIN_NAME.vst3"
+
+      - name: auval (AU)
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          rm -rf "$HOME/Library/Audio/Plug-Ins/Components/$PLUGIN_NAME.component"
+          cp -R "dist/$PLUGIN_NAME-macOS/$PLUGIN_NAME.component" "$HOME/Library/Audio/Plug-Ins/Components/"
+          # Make the system notice the newly installed component.
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 2
+          auval -a | grep -i "$AU_MANUFACTURER" || true
+          auval -strict -v $AU_TYPE $AU_SUBTYPE $AU_MANUFACTURER
+
+      - name: Zip
+        run: |
+          cd dist
+          ditto -c -k --keepParent "$PLUGIN_NAME-macOS" "$PLUGIN_NAME-macOS.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/${{ env.PLUGIN_NAME }}-macOS.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Upload pluginval logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pluginval-logs-macOS
+          path: pluginval-logs
+          if-no-files-found: ignore
+
+  # ----------------------------------------------------------------------------
+  windows:
+    name: Windows (x64 VST3 + Standalone)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read JUCE version
+        id: juce
+        run: echo "tag=$(sed -nE 's/^set\(IRENE_JUCE_TAG +"([^"]+)".*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache JUCE download
+        uses: actions/cache@v6
+        with:
+          path: |
+            .deps/juce-src
+            .deps/juce-subbuild
+          key: juce-${{ runner.os }}-${{ steps.juce.outputs.tag }}
+
+      - name: Configure
+        # The static MSVC runtime (CMAKE_MSVC_RUNTIME_LIBRARY) is set in CMakeLists.txt.
+        run: cmake -S . -B build -A x64 -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+      - name: Build
+        run: cmake --build build --config $BUILD_TYPE --parallel
+
+      - name: Run unit tests
+        run: ctest --test-dir build -C $BUILD_TYPE --output-on-failure
+
+      - name: Collect binaries
+        run: |
+          ART="build/${PLUGIN_NAME}_artefacts/$BUILD_TYPE"
+          mkdir -p "dist/$PLUGIN_NAME-Windows"
+          cp -R "$ART/VST3/$PLUGIN_NAME.vst3" "dist/$PLUGIN_NAME-Windows/"
+          cp "$ART/Standalone/$PLUGIN_NAME.exe" "dist/$PLUGIN_NAME-Windows/"
+
+      - name: Check for static runtime (no VC++ redistributable needed)
+        shell: pwsh
+        run: |
+          $dumpbin = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -Last 1
+          $binary = "dist\$env:PLUGIN_NAME-Windows\$env:PLUGIN_NAME.vst3\Contents\x86_64-win\$env:PLUGIN_NAME.vst3"
+          $deps = & $dumpbin /dependents $binary
+          $deps
+          if ($deps -match 'VCRUNTIME|MSVCP|ucrtbase') { throw "Plugin links the dynamic C++ runtime" }
+
+      - name: pluginval (VST3)
+        run: |
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_Windows.zip"
+          unzip -oq pluginval.zip
+          ./pluginval.exe --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process \
+            --output-dir pluginval-logs --validate "dist/$PLUGIN_NAME-Windows/$PLUGIN_NAME.vst3"
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path "dist\$env:PLUGIN_NAME-Windows" -DestinationPath "dist\$env:PLUGIN_NAME-Windows.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/${{ env.PLUGIN_NAME }}-Windows.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Upload pluginval logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pluginval-logs-Windows
+          path: pluginval-logs
+          if-no-files-found: ignore
+
+  # ----------------------------------------------------------------------------
+  package:
+    name: Package / Release
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download plugin zips
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ env.PLUGIN_NAME }}-*
+          path: dist
+          merge-multiple: true
+          skip-decompress: true
+
+      - name: Check the zips
+        run: |
+          ls -lR dist
+          for os in macOS Windows; do
+            zip=$(find dist -type f -name "$PLUGIN_NAME-$os.zip" | head -1)
+            [[ -n "$zip" ]] || { echo "Missing $PLUGIN_NAME-$os.zip"; exit 1; }
+            unzip -l "$zip" | tail -3
+          done
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" $(find dist -type f -name "$PLUGIN_NAME-*.zip") \
+            --repo "$GITHUB_REPOSITORY" --title "$PLUGIN_NAME $GITHUB_REF_NAME" --generate-notes
