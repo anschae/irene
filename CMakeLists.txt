@@ -11,7 +11,7 @@ set(IRENE_COMPANY_NAME       "anschae")
 set(IRENE_MANUFACTURER_CODE  "Ansc")   # 4 chars, at least one uppercase (AU)
 set(IRENE_PLUGIN_CODE        "IRne")   # 4 chars, at least one uppercase (AU)
 set(IRENE_BUNDLE_ID          "com.anschae.irene")
-set(IRENE_JUCE_TAG           "8.0.17-security")   # pinned JUCE 8.x release
+set(IRENE_JUCE_TAG           "9.0.5")  # pinned JUCE release
 
 # ==============================================================================
 # Platform settings (must be set before project())

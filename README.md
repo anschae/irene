@@ -65,8 +65,8 @@ GitHub Actions then builds everything, runs the checks and creates a GitHub Rele
 
 ## Design decisions
 
-- **JUCE version:** pinned to `8.0.17-security`, the newest JUCE 8 tag. JUCE 9 exists but the plugin was specified against JUCE 8. The tag is set in one place at the top of `CMakeLists.txt`.
-- **Licence note:** JUCE 8 is dual-licensed (AGPLv3 or a JUCE licence). That matters only if you distribute the plugin to others.
+- **JUCE version:** pinned to `9.0.5`. The spec said JUCE 8, but that line now only receives security patches, while JUCE 9 has the same licence terms and system requirements. The tag is set in one place at the top of `CMakeLists.txt`.
+- **Licence note:** JUCE is dual-licensed (AGPLv3 or a JUCE licence). That matters only if you distribute the plugin to others.
 - **Plugin identity** (name, manufacturer, codes, bundle id, version) is defined once, at the top of `CMakeLists.txt`.
 - **Number of IR slots:** the constant `kNumSlots` in `src/Config.h`.
 - **CI runners are pinned** to known toolchains (`macos-15`, `windows-2022`, `ubuntu-24.04`) rather than `*-latest`, so a runner update can't break the build unannounced.
