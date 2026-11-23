@@ -74,7 +74,7 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 - `.github/workflows/build.yml`: Linux (tests, pluginval), macOS (universal VST3/AU/Standalone, ad-hoc signing, pluginval, auval), Windows (VST3/Standalone, static runtime check, pluginval), then a packaging job. A full run takes about 20 minutes; macOS is the slowest.
 - Watch a run with `gh run list --repo anschae/irene` and `gh run view <id> --repo anschae/irene --log-failed`.
 - Claude sessions have so far been able to push to `main` but **not** to push tags or create releases. The owner makes releases on the GitHub website (steps in the README). The workflow attaches the zips to a release that already exists.
-- The release upload step has never run yet (no tag has been pushed). If the first release has no zips attached, look there first.
+- The release upload step works: the owner published `v0.1.0` on the website on 2026-11-23 and the workflow attached `IRene-macOS.zip` and `IRene-Windows.zip`. Bump `IRENE_VERSION` in `CMakeLists.txt` with each step, so the plugin shows the version the owner releases.
 
 ## Status and backlog
 
