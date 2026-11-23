@@ -477,7 +477,8 @@ namespace
                 expectEquals (irene->getVisibleSlots(), 3);
                 expectEquals (editor->getWidth(), IReneEditor::baseWidthFor (3) + browser);
 
-                // Auto gain readout
+                // Auto gain readout (the levels are worked out in the background: wait for them)
+                processor.updateLevelsNow();
                 pump (150);
                 expectEquals (irene->getGlobalSectionForTests()->getAutoGainTextForTests(), juce::String ("-6.0 dB"));
 
