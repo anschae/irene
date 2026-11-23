@@ -166,6 +166,7 @@ namespace irene::analysis
         };
 
         std::array<SlotData, kNumSlots> slotData;
+        const auto autoGain = static_cast<double> (juce::Decibels::decibelsToGain (s.autoGainDb));
 
         for (int i = 0; i < kNumSlots; ++i)
         {
@@ -205,13 +206,13 @@ namespace irene::analysis
 
                 if (input.stereoOutput)
                 {
-                    left *= static_cast<double> (slot.gains[0]);
-                    right *= static_cast<double> (slot.gains[1]);
+                    left *= static_cast<double> (slot.gains[0]) * autoGain;
+                    right *= static_cast<double> (slot.gains[1]) * autoGain;
                 }
                 else
                 {
                     // mono output: the slot's mono sum, pan ignored
-                    left = right = 0.5 * (left + right) * static_cast<double> (slot.gains[0]);
+                    left = right = 0.5 * (left + right) * static_cast<double> (slot.gains[0]) * autoGain;
                 }
 
                 curves.slotDb[i][p] = toDb (std::abs (select (left, right) * inOut));
@@ -228,6 +229,117 @@ namespace irene::analysis
             smooth (slot, smoothing);
 
         return curves;
+    }
+
+    //==============================================================================
+    float Levels::autoGainDb() const noexcept
+    {
+        if (numAudible < 2)
+            return 0.0f;
+
+        return juce::jlimit (-kMaxAutoGainCutDb, 0.0f, loudestSlotDb - blendDb);
+    }
+
+    Levels computeLevels (const ResponseInput& input, const std::vector<double>& frequencies)
+    {
+        using Complex = std::complex<double>;
+
+        Levels levels;
+        const auto& s = input.settings;
+        const auto fs = input.sampleRate;
+        const auto numPoints = frequencies.size();
+
+        struct SlotData
+        {
+            const SlotSpectrum* spectrum = nullptr;
+            std::array<float, 2> gains { 0.0f, 0.0f };
+            double delaySamples = 0.0;
+            double power = 0.0;
+        };
+
+        std::array<SlotData, kNumSlots> slotData;
+
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            const auto index = static_cast<size_t> (i);
+            const auto& spectrum = input.slots[index];
+
+            if (spectrum == nullptr || ! spectrum->isValid() || spectrum->left.size() != numPoints || ! s.isSlotAudible (i))
+                continue;
+
+            slotData[index].spectrum = spectrum.get();
+            slotData[index].gains = SlotDsp::computeGains (s.slots[index], true, input.stereoOutput, spectrum->stereo);
+            slotData[index].delaySamples = static_cast<double> (juce::jlimit (0.0f, kMaxDelayMs, s.slots[index].delayMs)) * 0.001 * fs;
+            ++levels.numAudible;
+        }
+
+        if (levels.numAudible == 0)
+            return levels;
+
+        // power of a (left, right) pair as heard on this output
+        const auto power = [&input] (Complex left, Complex right)
+        {
+            return input.stereoOutput ? 0.5 * (std::norm (left) + std::norm (right)) : std::norm (left);
+        };
+
+        auto blendPower = 0.0, wetPower = 0.0;
+        auto counted = 0;
+
+        for (size_t p = 0; p < numPoints; ++p)
+        {
+            const auto f = frequencies[p];
+
+            if (f < kLoudnessLowHz || f > kLoudnessHighHz)
+                continue;
+
+            const auto omega = 2.0 * std::numbers::pi * f / fs;
+            Complex sumLeft { 0.0, 0.0 }, sumRight { 0.0, 0.0 };
+
+            for (size_t i = 0; i < slotData.size(); ++i)
+            {
+                auto& slot = slotData[i];
+
+                if (slot.spectrum == nullptr)
+                    continue;
+
+                const auto common = FilterBlock::response (s.slots[i].filter, f, fs) * FractionalDelay::response (slot.delaySamples, omega);
+                auto left = Complex (slot.spectrum->left[p]) * common;
+                auto right = Complex (slot.spectrum->right[p]) * common;
+
+                if (input.stereoOutput)
+                {
+                    left *= static_cast<double> (slot.gains[0]);
+                    right *= static_cast<double> (slot.gains[1]);
+                }
+                else
+                {
+                    left = right = 0.5 * (left + right) * static_cast<double> (slot.gains[0]);
+                }
+
+                slot.power += power (left, right);
+                sumLeft += left;
+                sumRight += right;
+            }
+
+            const auto inOut = FilterBlock::response (s.inputFilter, f, fs) * FilterBlock::response (s.outputFilter, f, fs);
+            blendPower += power (sumLeft, sumRight);
+            wetPower += power (sumLeft * inOut, sumRight * inOut);
+            ++counted;
+        }
+
+        if (counted == 0)
+            return levels;
+
+        const auto toDbPower = [counted] (double sum) { return static_cast<float> (10.0 * std::log10 (std::max (sum / counted, 1.0e-20))); };
+
+        levels.blendDb = toDbPower (blendPower);
+
+        for (const auto& slot : slotData)
+            if (slot.spectrum != nullptr)
+                levels.loudestSlotDb = std::max (levels.loudestSlotDb, toDbPower (slot.power));
+
+        levels.wetDb = toDbPower (wetPower) + (s.autoGainOn ? levels.autoGainDb() : 0.0f) + s.outGainDb;
+        return levels;
     }
 
     std::vector<float> computeFilterCurve (const FilterBlockSettings& settings, double sampleRate, const std::vector<double>& frequencies)
@@ -252,7 +364,6 @@ namespace irene::analysis
 
     SpectrumWorker::~SpectrumWorker()
     {
-        cancelPendingUpdate();
         signalThreadShouldExit();
         notify();
         stopThread (10000);
@@ -276,10 +387,19 @@ namespace irene::analysis
         return true;
     }
 
-    void SpectrumWorker::waitUntilUpToDate()
+    bool SpectrumWorker::waitUntilUpToDate (int timeoutMs)
     {
+        const auto start = juce::Time::getMillisecondCounter();
+
         while (! isUpToDate() && ! threadShouldExit())
+        {
+            if (timeoutMs >= 0 && juce::Time::getMillisecondCounter() - start > static_cast<juce::uint32> (timeoutMs))
+                return false;
+
             juce::Thread::sleep (2);
+        }
+
+        return isUpToDate();
     }
 
     void SpectrumWorker::run()
@@ -315,15 +435,81 @@ namespace irene::analysis
             everRan = true;
 
             if (changed)
-                triggerAsyncUpdate();
+                sendChange();
 
             wait (40);
         }
     }
 
-    void SpectrumWorker::handleAsyncUpdate()
+    //==============================================================================
+    LevelWorker::LevelWorker (SpectrumWorker& s, Context c)
+        : juce::Thread ("IRene levels"), spectra (s), context (std::move (c))
     {
-        if (onSpectraChanged)
-            onSpectraChanged();
+        startThread (juce::Thread::Priority::low);
+    }
+
+    LevelWorker::~LevelWorker()
+    {
+        signalThreadShouldExit();
+        notify();
+        stopThread (10000);
+    }
+
+    bool LevelWorker::getWetLoudnessDb (float& result) const noexcept
+    {
+        result = wetDb.load (std::memory_order_relaxed);
+        return wetValid.load (std::memory_order_relaxed);
+    }
+
+    void LevelWorker::update()
+    {
+        const juce::ScopedLock sl (updateLock);
+
+        const auto rate = context.sampleRate();
+        const auto stereo = context.stereoOutput();
+        auto settings = context.readSettings();
+        settings.autoGainDb = settings.matchGainDb = 0.0f;
+
+        std::array<std::shared_ptr<const SlotSpectrum>, kNumSlots> current;
+
+        for (int i = 0; i < kNumSlots; ++i)
+            current[static_cast<size_t> (i)] = spectra.getSpectrum (i);
+
+        if (haveLast && settings == lastSettings && current == lastSpectra
+            && juce::exactlyEqual (rate, lastRate) && stereo == lastStereo)
+            return;
+
+        haveLast = true;
+        lastSettings = settings;
+        lastSpectra = current;
+        lastRate = rate;
+        lastStereo = stereo;
+
+        if (rate <= 0.0)
+        {
+            autoGainDb = 0.0f;
+            wetValid = false;
+            return;
+        }
+
+        ResponseInput input;
+        input.settings = settings;
+        input.sampleRate = rate;
+        input.stereoOutput = stereo;
+        input.slots = current;
+
+        const auto levels = computeLevels (input, spectra.getFrequencies());
+        autoGainDb = settings.autoGainOn ? levels.autoGainDb() : 0.0f;
+        wetDb = levels.wetDb;
+        wetValid = levels.numAudible > 0;
+    }
+
+    void LevelWorker::run()
+    {
+        while (! threadShouldExit())
+        {
+            update();
+            wait (20);
+        }
     }
 }

@@ -236,6 +236,36 @@ int main (int argc, char* argv[])
         pumpMessages (100);
     }
 
+    // Four and five slots ("+"), then back to three
+    if (auto* plus = findButton (*editor, "+"))
+    {
+        plus->triggerClick();
+        pumpMessages (200);
+        ok = save (*editor, out.getChildFile ("slots-4.png")) && ok;
+
+        if (auto* plusAgain = findButton (*editor, "+"))
+        {
+            plusAgain->triggerClick();
+            pumpMessages (200);
+            ok = save (*editor, out.getChildFile ("slots-5.png")) && ok;
+        }
+
+        processor.hideLastSlot();
+        processor.hideLastSlot();
+        pumpMessages (200);
+    }
+
+    // A/B: B active with loudness matching
+    if (auto* b = findButton (*editor, "B"))
+    {
+        processor.setLoudnessMatch (true);
+        b->triggerClick();
+        pumpMessages (150); // the click is delivered asynchronously
+        set ("slot1_gain", 4.0f);
+        pumpMessages (300);
+        ok = save (*editor, out.getChildFile ("ab.png")) && ok;
+    }
+
     // A second size, to check the scaling
     editor->setSize (juce::roundToInt (editor->getWidth() * 1.5f), juce::roundToInt (editor->getHeight() * 1.5f));
     pumpMessages (150);

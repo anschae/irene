@@ -5,6 +5,8 @@ namespace irene
     namespace
     {
         constexpr double kSmoothingSeconds = 0.02;
+        constexpr double kAutoGainSeconds = 0.08; // follows the convolution's 50 ms IR crossfade
+        constexpr double kDryFillSeconds = 0.06;
 
         void updatePeak (std::atomic<float>& peak, const float* data, int numSamples) noexcept
         {
@@ -40,6 +42,8 @@ namespace irene
 
         mix.reset (sampleRate, kSmoothingSeconds);
         outGain.reset (sampleRate, kSmoothingSeconds);
+        autoGain.reset (sampleRate, kAutoGainSeconds);
+        dryFill.reset (sampleRate, kDryFillSeconds);
         snapSmoothers = true;
         prepared = true;
     }
@@ -58,18 +62,20 @@ namespace irene
         outputFilter.setSettings (settings.outputFilter);
 
         const auto mixTarget = juce::jlimit (0.0f, 1.0f, settings.mix);
-        const auto gainTarget = juce::Decibels::decibelsToGain (settings.outGainDb);
+        const auto gainTarget = juce::Decibels::decibelsToGain (settings.outGainDb + settings.matchGainDb);
+        const auto autoGainTarget = juce::Decibels::decibelsToGain (settings.autoGainDb);
 
         if (snapSmoothers)
         {
             mix.setCurrentAndTargetValue (mixTarget);
             outGain.setCurrentAndTargetValue (gainTarget);
-            snapSmoothers = false;
+            autoGain.setCurrentAndTargetValue (autoGainTarget);
         }
         else
         {
             mix.setTargetValue (mixTarget);
             outGain.setTargetValue (gainTarget);
+            autoGain.setTargetValue (autoGainTarget);
         }
 
         for (int pos = 0; pos < numSamples; pos += chunkSize)
@@ -79,6 +85,8 @@ namespace irene
 
             processChunk (host, juce::jmin (chunkSize, numSamples - pos), settings, nonRealtime);
         }
+
+        snapSmoothers = false;
     }
 
     void Engine::processChunk (float* const* host, int n, const EngineSettings& settings, bool nonRealtime) noexcept
@@ -109,10 +117,39 @@ namespace irene
         juce::FloatVectorOperations::clear (wetChannels[0], n);
         juce::FloatVectorOperations::clear (wetChannels[1], n);
 
+        auto anyLoaded = false;
+
         for (int i = 0; i < kNumSlots; ++i)
-            slots[static_cast<size_t> (i)]->process (workChannels, wetChannels, n,
-                                                     settings.slots[static_cast<size_t> (i)],
-                                                     settings.isSlotAudible (i), stereoOut, nonRealtime);
+        {
+            auto& slot = *slots[static_cast<size_t> (i)];
+            slot.process (workChannels, wetChannels, n, settings.slots[static_cast<size_t> (i)],
+                          settings.isSlotAudible (i), stereoOut, ! stereoIn, nonRealtime);
+            anyLoaded = anyLoaded || slot.hasIR();
+        }
+
+        anyIR.store (anyLoaded, std::memory_order_relaxed);
+
+        // Auto gain on the wet signal.
+        if (autoGain.isSmoothing())
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                const auto g = autoGain.getNextValue();
+                wetChannels[0][i] *= g;
+                wetChannels[1][i] *= g;
+            }
+        }
+        else if (const auto g = autoGain.getCurrentValue(); g != 1.0f)
+        {
+            juce::FloatVectorOperations::multiply (wetChannels[0], g, n);
+            juce::FloatVectorOperations::multiply (wetChannels[1], g, n);
+        }
+
+        // Nothing loaded anywhere: let the dry signal through instead.
+        if (snapSmoothers)
+            dryFill.setCurrentAndTargetValue (anyLoaded ? 0.0f : 1.0f);
+        else
+            dryFill.setTargetValue (anyLoaded ? 0.0f : 1.0f);
 
         // --- Dry/wet mix ---------------------------------------------------------
         // `work` holds the dry signal (after the input filter block).
@@ -125,11 +162,11 @@ namespace irene
 
         const auto numProcessed = stereoOut ? 2 : 1;
 
-        if (mix.isSmoothing())
+        if (mix.isSmoothing() || dryFill.isSmoothing() || dryFill.getCurrentValue() > 0.0f)
         {
             for (int i = 0; i < n; ++i)
             {
-                const auto m = mix.getNextValue();
+                const auto m = mix.getNextValue() * (1.0f - dryFill.getNextValue());
 
                 for (int ch = 0; ch < numProcessed; ++ch)
                     workChannels[ch][i] += m * (wetChannels[ch][i] - workChannels[ch][i]);

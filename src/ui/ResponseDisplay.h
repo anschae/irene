@@ -13,10 +13,12 @@ namespace irene::ui
         Recomputed on the message thread, at most 30 times per second, and only
         when something changed. The IR spectra come from a background thread. */
     class ResponseDisplay final : public juce::Component,
-                                  private juce::Timer
+                                  private juce::Timer,
+                                  private Broadcaster::Listener
     {
     public:
         explicit ResponseDisplay (IReneProcessor&);
+        ~ResponseDisplay() override;
 
         /** Which filter block to highlight: 0 = Input, 1..kNumSlots = slots, last = Output. */
         void setHighlightedBlock (int tabIndex, juce::Colour colour);
@@ -33,13 +35,14 @@ namespace irene::ui
 
     private:
         void timerCallback() override;
+        void broadcasterChanged (Broadcaster*) override { dirty = true; }
         void recompute();
         juce::Path makePath (const std::vector<float>& db) const;
         float xForFrequency (double freq) const;
         float yForDb (float db) const;
 
         IReneProcessor& processor;
-        analysis::SpectrumWorker worker;
+        analysis::SpectrumWorker& worker; // owned by the processor
 
         juce::ComboBox channelBox, smoothingBox;
         juce::TextButton slotsButton { "Slot curves" };

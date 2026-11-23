@@ -84,6 +84,13 @@ namespace irene
             snapNext = true;
         }
 
+        /** Makes channel `to` continue exactly like channel `from` (used when a
+            slot switches from mono to stereo processing). */
+        void copyChannelState (int from, int to) noexcept
+        {
+            buffers[static_cast<size_t> (to)] = buffers[static_cast<size_t> (from)]; // same size: no allocation
+        }
+
         void setDelaySamples (double newDelay) noexcept
         {
             newDelay = std::clamp (newDelay, 0.0, maxDelay);

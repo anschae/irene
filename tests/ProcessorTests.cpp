@@ -91,7 +91,7 @@ namespace
                 // DAW projects and automation depend on these IDs. This list is written out
                 // independently of the plugin code on purpose: if this test fails, an ID was
                 // renamed or removed, which breaks existing projects.
-                juce::StringArray expected { "mix", "out_gain" };
+                juce::StringArray expected { "mix", "out_gain", "autogain" };
 
                 const juce::StringArray filterSuffixes {
                     "filter_bypass", "hp_on", "hp_freq", "hp_slope",
@@ -124,13 +124,23 @@ namespace
                     if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (param))
                     {
                         actual.add (withId->paramID);
-                        expectEquals (withId->getVersionHint(), 1, withId->paramID);
+
+                        // 1 for everything up to 0.2 (slots 1-3), 2 for what 0.3 added
+                        const auto slotNumber = withId->paramID.startsWith ("slot") ? withId->paramID.substring (4).getIntValue() : 0;
+                        const auto addedIn03 = withId->paramID == "autogain" || slotNumber >= 4;
+                        expectEquals (withId->getVersionHint(), addedIn03 ? 2 : 1, withId->paramID);
                     }
 
                 expected.sort (false);
                 actual.sort (false);
                 expectEquals (actual.joinIntoString ("\n"), expected.joinIntoString ("\n"));
-                expectEquals (actual.size(), 2 + kNumSlots * 7 + (kNumSlots + 2) * 21);
+                expectEquals (actual.size(), 3 + kNumSlots * 7 + (kNumSlots + 2) * 21);
+
+                // The parameters of 0.2 keep their positions; the new ones come after them
+                const auto params = processor.getParameters();
+                const auto idAt = [&params] (int index) { return dynamic_cast<juce::AudioProcessorParameterWithID*> (params[index])->paramID; };
+                expectEquals (idAt (0), juce::String ("mix"));
+                expectEquals (idAt (params.size() - 1), juce::String ("autogain"));
 
                 // Defaults: fully wet, everything neutral
                 expectEquals (getParam (processor, "mix"), 100.0f);
@@ -143,15 +153,18 @@ namespace
                 expect (isDefault (processor.getParamRefs().read()));
             }
 
-            beginTest ("Nothing loaded: silence, any block size, zero latency reported");
+            beginTest ("Nothing loaded: dry signal, any block size, zero latency reported");
             {
                 IReneProcessor processor;
                 expect (processor.setBusesLayout (makeLayout (stereo, stereo)));
                 processor.prepareToPlay (48000.0, 512);
                 expectEquals (processor.getLatencySamples(), 0);
 
-                const auto output = renderProcessor (processor, makeNoise (2, 3000, 1), 173);
-                expectEquals (output.getMagnitude (0, 3000), 0.0f);
+                const auto input = makeNoise (2, 3000, 1);
+                const auto output = renderProcessor (processor, input, 173);
+
+                for (int ch = 0; ch < 2; ++ch)
+                    expect (errorDb (output.getReadPointer (ch), input.getReadPointer (ch), 3000) < -140.0);
             }
 
             beginTest ("Loading a file in the background");

@@ -10,7 +10,7 @@
 // !! them. New parameters must be added with a higher version hint.
 //
 // ID scheme (N = 1..kNumSlots):
-//   Global          mix, out_gain
+//   Global          mix, out_gain, autogain
 //   Slot            slotN_gain, slotN_pan, slotN_phase, slotN_delay,
 //                   slotN_mute, slotN_solo, slotN_length
 //   Filter blocks   <p>_filter_bypass,
@@ -22,7 +22,11 @@
 
 namespace irene
 {
+    /** Version hints: 1 for everything in 0.1/0.2 (mix, out_gain, in/out
+        filters, slots 1-3); 2 for what 0.3 added (slots 4 and 5, autogain).
+        A parameter's hint never changes once released. */
     inline constexpr int kParamVersionHint = 1;
+    int versionHintFor (const juce::String& parameterId);
 
     namespace ids
     {
@@ -32,6 +36,7 @@ namespace irene
 
         inline const juce::String mix { "mix" };
         inline const juce::String outGain { "out_gain" };
+        inline const juce::String autoGain { "autogain" }; // added in 0.3 (version hint 2)
 
         inline const std::array<const char*, kNumBands> bandNames { "low", "mid", "high" };
 
@@ -103,6 +108,7 @@ namespace irene
         std::array<SlotParamRefs, kNumSlots> slots;
         std::atomic<float>* mix = nullptr;
         std::atomic<float>* outGain = nullptr;
+        std::atomic<float>* autoGain = nullptr;
 
         void attach (juce::AudioProcessorValueTreeState&);
 

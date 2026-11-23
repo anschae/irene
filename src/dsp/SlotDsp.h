@@ -41,12 +41,19 @@ namespace irene
 
             @param audible       false if the slot is muted or another slot is soloed
             @param stereoOutput  true: apply the pan law. false: pan is ignored
+            @param monoInput     true if both input channels are the same (mono
+                                 source): with a mono IR, only one channel is then
+                                 convolved and filtered, which halves the CPU load
             @param nonRealtime   true while the host renders offline: a new IR is
                                  then installed immediately instead of in the background */
         void process (const float* const* input, float* const* wetOut, int numSamples,
-                      const SlotSettings& settings, bool audible, bool stereoOutput, bool nonRealtime) noexcept;
+                      const SlotSettings& settings, bool audible, bool stereoOutput, bool monoInput, bool nonRealtime) noexcept;
 
         bool isIdle() const noexcept { return idle; }
+        bool hasIR() const noexcept { return ! irIsEmpty; }
+
+        /** True if the last block was processed on one channel only (for tests). */
+        bool wasProcessedInMono() const noexcept { return monoProcessing; }
 
         /** Left/right gains for the given settings (also used by export and display). */
         static std::array<float, 2> computeGains (const SlotSettings&, bool audible, bool stereoOutput, bool irIsStereo) noexcept;
@@ -69,6 +76,11 @@ namespace irene
         bool irIsEmpty = true;
         bool irIsStereo = false;
         bool idle = true;
+
+        // Mono processing (see process()). A mono IR that replaced a stereo IR
+        // keeps both channels running until the next IR, so that the
+        // convolution's crossfade between the two always has a valid right channel.
+        bool stereoLocked = false, monoProcessing = false;
         bool countingDown = false;
         int idleCountdown = 0;
 

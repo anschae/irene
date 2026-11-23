@@ -123,6 +123,18 @@ namespace irene::ui
         addAndMakeVisible (mix);
         addAndMakeVisible (outGain);
 
+        autoGain.attach (processor.getValueTreeState(), ids::autoGain);
+        autoGain.setTooltip ("Keeps the blend about as loud as its loudest slot: adding slots doesn't make it louder, "
+                             "and soloing one doesn't make it quieter. It only ever turns down. Below: the correction applied now.");
+        addAndMakeVisible (autoGain);
+
+        styleCaption (autoGainReadout, 11.0f, colours::textDim, juce::Justification::centred);
+        styleCaption (matchReadout, 11.0f, colours::solo, juce::Justification::centred);
+        autoGainReadout.setTooltip (autoGain.getTooltip());
+        matchReadout.setTooltip ("A/B loudness match: the gain B is played with so that it is as loud as A");
+        addAndMakeVisible (autoGainReadout);
+        addAndMakeVisible (matchReadout);
+
         startTimerHz (kMeterRefreshHz);
     }
 
@@ -131,6 +143,16 @@ namespace irene::ui
         auto& engine = processor.getEngine();
         inputMeter.push (engine.readInputPeak (0), engine.readInputPeak (1), processor.getTotalNumInputChannels());
         outputMeter.push (engine.readOutputPeak (0), engine.readOutputPeak (1), processor.getTotalNumOutputChannels());
+
+        const auto settings = processor.readSettings();
+        const auto formatDb = [] (float db)
+        {
+            return std::abs (db) < 0.05f ? juce::String ("0.0 dB") : (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB";
+        };
+
+        autoGainReadout.setText (settings.autoGainOn ? formatDb (settings.autoGainDb) : juce::String ("off"), juce::dontSendNotification);
+        matchReadout.setText (processor.isLoudnessMatchOn() && processor.getActiveSetup() == 1 ? "B " + formatDb (settings.matchGainDb) : juce::String(),
+                              juce::dontSendNotification);
     }
 
     void GlobalSection::paint (juce::Graphics& g)
@@ -148,6 +170,11 @@ namespace irene::ui
         outGain.setBounds (area.removeFromBottom (84));
         area.removeFromBottom (6);
         mix.setBounds (area.removeFromBottom (84));
+        area.removeFromBottom (8);
+        matchReadout.setBounds (area.removeFromBottom (14));
+        autoGainReadout.setBounds (area.removeFromBottom (14));
+        area.removeFromBottom (2);
+        autoGain.setBounds (area.removeFromBottom (24));
         area.removeFromBottom (10);
 
         inputMeter.setBounds (area.removeFromLeft (area.getWidth() / 2));

@@ -89,6 +89,7 @@ namespace
         p.setBusesLayout (makeLayout (layout, layout));
         p.setNonRealtime (true);
         p.prepareToPlay (sampleRate, 256);
+        p.updateLevelsNow(); // auto gain is worked out in the background: be sure it's current
 
         juce::AudioBuffer<float> output;
         output.makeCopyOf (input);

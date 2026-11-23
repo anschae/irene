@@ -17,6 +17,10 @@ namespace irene::ui
         void selectTab (int tabIndex);
         int getSelectedTab() const noexcept { return selectedTab; }
 
+        /** Shows the tabs of the first `numSlots` slots only. If the selected
+            tab disappears, Input is selected. */
+        void setVisibleSlots (int numSlots);
+
         std::function<void (int tabIndex)> onTabChanged;
 
         static juce::String tabName (int tabIndex);
@@ -46,6 +50,7 @@ namespace irene::ui
 
         IReneProcessor& processor;
         int selectedTab = -1;
+        int visibleSlots = kNumSlots;
 
         juce::OwnedArray<juce::TextButton> tabs;
         ParamToggle bypass { "Bypass", colours::warning };

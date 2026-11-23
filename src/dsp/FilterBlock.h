@@ -31,6 +31,10 @@ namespace irene
 
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
+        /** Makes channel `to` continue exactly like channel `from` (used when a
+            slot switches from mono to stereo processing). */
+        void copyChannelState (int from, int to) noexcept;
+
         /** True if process() currently leaves the signal untouched. */
         bool isIdle() const noexcept;
 

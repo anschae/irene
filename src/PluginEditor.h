@@ -34,17 +34,34 @@ namespace irene
         void paint (juce::Graphics&) override;
         void resized() override;
 
-        /** Size of the UI at 100 % (the browser adds to the width when open).
-            The width grows with the number of slots. */
+        /** Size of the UI at 100 %. The width depends on how many slots are
+            shown (up to three full-width strips; four or five narrower ones)
+            and on the browser. */
         static constexpr int kGap = 8;
-        static constexpr int kStripWidth = 315;
+        static constexpr int kStripWidth = 315;        // up to three slots
+        static constexpr int kCompactStripWidth = 250; // four or five slots
+        static constexpr int kAddSlotWidth = 26;       // the "+" column
         static constexpr int kGlobalWidth = 130;
         static constexpr int kMargin = 10;
-        static constexpr int kBaseWidth = 2 * kMargin + kNumSlots * kStripWidth + (kNumSlots - 1) * kGap + kGap + kGlobalWidth;
         static constexpr int kBaseHeight = 702;
         static constexpr int kDisplayHeight = 190;
 
-        int getBaseWidth() const noexcept { return kBaseWidth + (browserOpen ? browserWidth + kGap : 0); }
+        static constexpr int stripWidthFor (int visibleSlots) noexcept { return visibleSlots <= 3 ? kStripWidth : kCompactStripWidth; }
+
+        static constexpr int slotAreaWidth (int visibleSlots) noexcept
+        {
+            return visibleSlots * stripWidthFor (visibleSlots) + (visibleSlots - 1) * kGap
+                   + (visibleSlots < kNumSlots ? kGap + kAddSlotWidth : 0);
+        }
+
+        /** Width at 100 % without the browser. */
+        static constexpr int baseWidthFor (int visibleSlots) noexcept
+        {
+            return 2 * kMargin + slotAreaWidth (visibleSlots) + kGap + kGlobalWidth;
+        }
+
+        int getBaseWidth() const noexcept { return baseWidthFor (visibleSlots) + (browserOpen ? browserWidth + kGap : 0); }
+        int getVisibleSlots() const noexcept { return visibleSlots; }
 
         /** Width of the IR browser at 100 %. Changing it makes the window wider
             or narrower at the same scale. With `remember` the width is stored
@@ -63,6 +80,9 @@ namespace irene
         ui::NotesPanel* getNotesPanelForTests() noexcept { return &content.notesPanel; }
         ui::SlotStrip* getStripForTests (int slot) noexcept { return content.strips[slot]; }
         juce::TextButton& getNotesButtonForTests() noexcept { return content.notesButton; }
+        juce::Button& getAddSlotButtonForTests() noexcept { return content.addSlotButton; }
+        ui::FilterEditor* getFilterEditorForTests() noexcept { return &content.filterEditor; }
+        ui::GlobalSection* getGlobalSectionForTests() noexcept { return &content.globalSection; }
 
     private:
         /** The thin strip between the browser and the rest: drag it to change
@@ -101,6 +121,8 @@ namespace irene
             IReneEditor& editor;
             juce::Label title, version;
             juce::TextButton settingsButton { "Settings" }, browserButton { "Browser" }, exportButton { "Export IR..." }, notesButton { "Notes" };
+            ui::PlusButton addSlotButton;
+            juce::TextButton setupA { "A" }, setupB { "B" }, copySetup { "A > B" }, matchButton { "Match" };
             ui::ConfirmOverlay confirm;
             ui::PresetBar presetBar;
             ui::BrowserPanel browser;
@@ -126,6 +148,8 @@ namespace irene
         void alignToSlot (int slot);
         void refreshStrips();
         void goBack (int slot);
+        void updateVisibleSlots();
+        void updateSetupButtons();
         void auditionSoloChanged();
         void updateNotesButton();
 
@@ -138,6 +162,7 @@ namespace irene
         float currentScale = 1.0f;
         bool applyingScale = false, constructed = false, browserOpen = true;
         int browserWidth = GlobalSettings::kDefaultBrowserWidth;
+        int visibleSlots = kDefaultVisibleSlots;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IReneEditor)
     };

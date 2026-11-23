@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.22)
 # DAWs. Changing them after release makes existing projects lose the plugin.
 # ==============================================================================
 set(IRENE_PLUGIN_NAME        "IRene")
-set(IRENE_VERSION            "0.2.0")
+set(IRENE_VERSION            "0.3.0")
 set(IRENE_COMPANY_NAME       "anschae")
 set(IRENE_MANUFACTURER_CODE  "Ansc")   # 4 chars, at least one uppercase (AU)
 set(IRENE_PLUGIN_CODE        "IRne")   # 4 chars, at least one uppercase (AU)
@@ -192,7 +192,8 @@ if(IRENE_BUILD_TESTS)
         tests/ResponseTests.cpp
         tests/ExportTests.cpp
         tests/TimeAlignTests.cpp
-        tests/WorkflowTests.cpp)
+        tests/WorkflowTests.cpp
+        tests/LevelsAndSlotsTests.cpp)
 
     target_link_libraries(IReneTests PRIVATE IReneShared)
     # The tests pump the message loop by hand, which needs this switch.

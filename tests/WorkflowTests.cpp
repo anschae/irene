@@ -325,7 +325,7 @@ namespace
                 // --- Width: dragging the edge makes the window wider at the same scale
                 expectEquals (irene->getBrowserWidth(), GlobalSettings::kDefaultBrowserWidth);
                 irene->setBrowserWidth (450, false);
-                expectEquals (editor->getWidth(), IReneEditor::kBaseWidth + 450 + IReneEditor::kGap);
+                expectEquals (editor->getWidth(), IReneEditor::baseWidthFor (kDefaultVisibleSlots) + 450 + IReneEditor::kGap);
                 expectEquals (browser->getWidth(), 450);
                 expectEquals (settings->get().browserWidth, GlobalSettings::kDefaultBrowserWidth); // not yet stored
                 irene->setBrowserWidth (450, true);                                                 // mouse released
@@ -355,15 +355,17 @@ namespace
                 expectEquals (browser->getCurrentFileList().size(), 1);
                 items = enabledItems (browser->createRowMenu (0));
 
-                for (int i = 0; i < kNumSlots; ++i)
+                for (int i = 0; i < kDefaultVisibleSlots; ++i)
                     expect (items.contains (ui::BrowserPanel::loadIntoSlotItem + i));
+
+                expect (! items.contains (ui::BrowserPanel::loadIntoSlotItem + kDefaultVisibleSlots)); // hidden slots aren't offered
 
                 expect (items.contains (ui::BrowserPanel::toggleFavouriteItem));
                 expect (items.contains (ui::BrowserPanel::revealItem));
 
-                browser->handleRowMenuResult (0, ui::BrowserPanel::loadIntoSlotItem + kNumSlots - 1);
+                browser->handleRowMenuResult (0, ui::BrowserPanel::loadIntoSlotItem + kDefaultVisibleSlots - 1);
                 processor.getSlots().waitForPendingLoads();
-                expectEquals (processor.getSlots().getInfo (kNumSlots - 1).reference.name, juce::String ("Mesa SM57.wav"));
+                expectEquals (processor.getSlots().getInfo (kDefaultVisibleSlots - 1).reference.name, juce::String ("Mesa SM57.wav"));
 
                 browser->handleRowMenuResult (0, ui::BrowserPanel::toggleFavouriteItem);
                 expect (processor.getLibrary().isFavourite (hashFile (irFile)));
@@ -372,9 +374,9 @@ namespace
 
                 // --- The back button follows the slot's history
                 pump();
-                processor.getSlots().goBack (kNumSlots - 1);
+                processor.getSlots().goBack (kDefaultVisibleSlots - 1);
                 processor.getSlots().waitForPendingLoads();
-                expect (processor.getSlots().getInfo (kNumSlots - 1).status == SlotInfo::Status::empty);
+                expect (processor.getSlots().getInfo (kDefaultVisibleSlots - 1).status == SlotInfo::Status::empty);
 
                 // --- Columns: hiding one is remembered for the next instance
                 auto& header = browser->getHeaderForTests();

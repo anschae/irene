@@ -7,7 +7,7 @@ namespace irene
         using APVTS = juce::AudioProcessorValueTreeState;
         using Attributes = juce::AudioParameterFloatAttributes;
 
-        juce::ParameterID pid (const juce::String& id) { return { id, kParamVersionHint }; }
+        juce::ParameterID pid (const juce::String& id) { return { id, versionHintFor (id) }; }
 
         //==============================================================================
         juce::NormalisableRange<float> logRange (float lo, float hi)
@@ -230,6 +230,18 @@ namespace irene
     }
 
     //==============================================================================
+    int versionHintFor (const juce::String& id)
+    {
+        if (id == ids::autoGain)
+            return 2;
+
+        // Slots 4 and up arrived with 0.3.
+        if (id.startsWith ("slot") && id.fromFirstOccurrenceOf ("slot", false, false).getIntValue() >= 4)
+            return 2;
+
+        return kParamVersionHint;
+    }
+
     juce::String ids::slotPrefix (int slotIndex)
     {
         return "slot" + juce::String (slotIndex + 1);
@@ -290,6 +302,12 @@ namespace irene
             addFilterBlock (*group, prefix, displayName);
             layout.add (std::move (group));
         }
+
+        // Added in 0.3, at the end so that no older parameter changes position.
+        // On for new instances. Projects and presets saved before 0.3 have no
+        // value for it and are switched to "off" when loaded (see IReneProcessor),
+        // so they keep sounding as they did.
+        layout.add (makeBool (ids::autoGain, "Auto Gain", true));
 
         return layout;
     }
@@ -378,6 +396,7 @@ namespace irene
 
         mix = raw (apvts, ids::mix);
         outGain = raw (apvts, ids::outGain);
+        autoGain = raw (apvts, ids::autoGain);
     }
 
     EngineSettings ParamRefs::read() const noexcept
@@ -391,6 +410,7 @@ namespace irene
         s.mix = asFloat (mix) / 100.0f;
         s.outputFilter = outputFilter.read();
         s.outGainDb = asFloat (outGain);
+        s.autoGainOn = asBool (autoGain);
         return s;
     }
 }

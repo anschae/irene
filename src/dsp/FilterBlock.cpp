@@ -418,4 +418,16 @@ namespace irene
 
         return h;
     }
+
+    void FilterBlock::copyChannelState (int from, int to) noexcept
+    {
+        const auto f = static_cast<size_t> (from), t = static_cast<size_t> (to);
+
+        for (auto* cut : { &highPass, &lowPass })
+            for (auto& section : cut->sections)
+                section.state[t] = section.state[f];
+
+        for (auto& band : bands)
+            band.section.state[t] = band.section.state[f];
+    }
 }

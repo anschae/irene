@@ -77,6 +77,8 @@ namespace irene
 
         idle = irIsEmpty;
         countingDown = false;
+        stereoLocked = false;
+        monoProcessing = false;
     }
 
     void SlotDsp::setIR (juce::AudioBuffer<float>&& impulseResponse)
@@ -108,8 +110,10 @@ namespace irene
         if (! mailboxFull.exchange (false))
             return;
 
+        const auto previousWasStereo = irIsStereo;
         irIsEmpty = mailboxIsEmptyIR;
         irIsStereo = mailboxBuffer.getNumChannels() > 1;
+        stereoLocked = ! irIsStereo && previousWasStereo;
         countingDown = false;
 
         const auto wasIdle = idle;
@@ -174,7 +178,7 @@ namespace irene
     }
 
     void SlotDsp::process (const float* const* input, float* const* wetOut, int numSamples,
-                           const SlotSettings& settings, bool audible, bool stereoOutput, bool nonRealtime) noexcept
+                           const SlotSettings& settings, bool audible, bool stereoOutput, bool monoInput, bool nonRealtime) noexcept
     {
         jassert (prepared && numSamples <= scratch.getNumSamples());
 
@@ -183,13 +187,29 @@ namespace irene
         if (idle || numSamples <= 0)
             return;
 
-        for (int ch = 0; ch < 2; ++ch)
+        // With the same signal on both inputs and a mono IR, both channels would
+        // come out identical: process the left one only and use it for both.
+        const auto mono = monoInput && ! irIsStereo && ! stereoLocked;
+
+        if (monoProcessing && ! mono)
+        {
+            // Back to two channels: the right channel's delay and filter memory
+            // must continue from where the left one is (they would have been equal).
+            delay.copyChannelState (0, 1);
+            filter.copyChannelState (0, 1);
+        }
+
+        monoProcessing = mono;
+        const auto numChannels = mono ? 1 : 2;
+
+        for (int ch = 0; ch < numChannels; ++ch)
             juce::FloatVectorOperations::copy (scratch.getWritePointer (ch), input[ch], numSamples);
 
-        float* channels[2] { scratch.getWritePointer (0), scratch.getWritePointer (1) };
+        // In mono, both "channels" point at the processed left channel.
+        float* channels[2] { scratch.getWritePointer (0), scratch.getWritePointer (mono ? 0 : 1) };
 
         {
-            juce::dsp::AudioBlock<float> block (channels, 2, static_cast<size_t> (numSamples));
+            juce::dsp::AudioBlock<float> block (channels, static_cast<size_t> (numChannels), static_cast<size_t> (numSamples));
             convolution.process (juce::dsp::ProcessContextReplacing<float> (block));
         }
 
@@ -207,10 +227,10 @@ namespace irene
         }
 
         delay.setDelaySamples (static_cast<double> (settings.delayMs) * 0.001 * spec.sampleRate);
-        delay.process (channels, 2, numSamples);
+        delay.process (channels, numChannels, numSamples);
 
         filter.setSettings (settings.filter);
-        filter.process (channels, 2, numSamples);
+        filter.process (channels, numChannels, numSamples);
 
         const auto target = computeGains (settings, audible, stereoOutput, irIsStereo);
 

@@ -527,23 +527,77 @@ namespace irene
     }
 
     //==============================================================================
+    SlotManager::Snapshot SlotManager::capture() const
+    {
+        Snapshot snapshot;
+        const juce::ScopedLock state (stateLock);
+
+        for (size_t i = 0; i < snapshot.size(); ++i)
+        {
+            const auto& s = slots[i];
+            auto& out = snapshot[i];
+            out.status = s.status;
+            out.source = s.status == SlotInfo::Status::ready ? s.source : nullptr;
+            out.reference = s.reference;
+            out.normalise = s.normalise;
+            out.autoTrim = s.autoTrim;
+        }
+
+        return snapshot;
+    }
+
+    void SlotManager::restoreAsync (const Snapshot& snapshot)
+    {
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            const auto index = static_cast<size_t> (i);
+            const auto& slot = snapshot[index];
+
+            {
+                const juce::ScopedLock state (stateLock);
+                history[index].clear();
+            }
+
+            if (slot.status == SlotInfo::Status::ready && slot.source != nullptr)
+            {
+                Job job;
+                job.slot = i;
+                job.restore = true;
+                job.entry.source = slot.source;
+                job.entry.normalise = slot.normalise;
+                job.entry.autoTrim = slot.autoTrim;
+                job.requestId = ++requestIds[index];
+
+                ++pendingLoads[index];
+                ++totalPending;
+
+                const juce::ScopedLock lock (jobLock);
+                jobs.push_back (std::move (job));
+            }
+            else
+            {
+                ++requestIds[index];
+                resetSlot (i, slot.status == SlotInfo::Status::missing ? SlotInfo::Status::missing : SlotInfo::Status::empty,
+                           slot.status == SlotInfo::Status::missing ? slot.reference : IRReference {});
+            }
+        }
+
+        notify();
+        sendChange();
+    }
+
     juce::ValueTree SlotManager::toValueTree (bool embedAudio) const
+    {
+        return snapshotToValueTree (capture(), embedAudio);
+    }
+
+    juce::ValueTree SlotManager::snapshotToValueTree (const Snapshot& snapshotToSave, bool embedAudio)
     {
         juce::ValueTree tree { treeType };
 
         for (int i = 0; i < kNumSlots; ++i)
         {
-            Slot snapshot;
-
-            {
-                const juce::ScopedLock state (stateLock);
-                const auto& s = slots[static_cast<size_t> (i)];
-                snapshot.status = s.status;
-                snapshot.source = s.source;
-                snapshot.reference = s.reference;
-                snapshot.normalise = s.normalise;
-                snapshot.autoTrim = s.autoTrim;
-            }
+            const auto& snapshot = snapshotToSave[static_cast<size_t> (i)];
 
             juce::ValueTree child { kSlotType };
             child.setProperty (kIndex, i, nullptr);
@@ -574,30 +628,28 @@ namespace irene
         return tree;
     }
 
-    void SlotManager::fromValueTree (const juce::ValueTree& tree)
+    SlotManager::Snapshot SlotManager::readSnapshot (const juce::ValueTree& tree) const
     {
+        Snapshot result;
+
         for (int i = 0; i < kNumSlots; ++i)
         {
-            {
-                const juce::ScopedLock state (stateLock);
-                history[static_cast<size_t> (i)].clear();
-            }
+            auto& out = result[static_cast<size_t> (i)];
 
+            // Slots a project didn't have (e.g. 4 and 5 in a project from 0.2) stay empty.
             const auto child = tree.getChildWithProperty (kIndex, i);
 
             IRReference ref { child.getProperty (kPath).toString(),
                               child.getProperty (kName).toString(),
                               child.getProperty (kHash).toString() };
 
-            const auto normalise = static_cast<bool> (child.getProperty (kNormalise, true));
-            const auto autoTrim = static_cast<bool> (child.getProperty (kAutoTrim, false));
+            out.normalise = static_cast<bool> (child.getProperty (kNormalise, true));
+            out.autoTrim = static_cast<bool> (child.getProperty (kAutoTrim, false));
 
             if (! child.isValid() || child.getProperty (kStatus).toString() == "empty" || ref.isEmpty())
-            {
-                ++requestIds[static_cast<size_t> (i)];
-                resetSlot (i, SlotInfo::Status::empty, {}); // not clear(): no history entry
                 continue;
-            }
+
+            out.reference = ref;
 
             // 1. Embedded audio: independent of any file on disk.
             if (const auto* embedded = child.getProperty (kAudio).getBinaryData())
@@ -611,7 +663,8 @@ namespace irene
                 {
                     if (auto source = IRSource::create (audio, static_cast<double> (child.getProperty (kSampleRate, 0.0)), ref))
                     {
-                        setSource (i, source, normalise, autoTrim);
+                        out.status = SlotInfo::Status::ready;
+                        out.source = source;
                         continue;
                     }
                 }
@@ -627,14 +680,48 @@ namespace irene
 
             if (file.existsAsFile())
             {
-                if (auto result = loadIRFile (file); result.source != nullptr)
+                if (auto loaded = loadIRFile (file); loaded.source != nullptr)
                 {
-                    setSource (i, result.source, normalise, autoTrim);
+                    out.status = SlotInfo::Status::ready;
+                    out.source = loaded.source;
+                    out.reference = loaded.source->reference;
                     continue;
                 }
             }
 
-            setMissing (i, ref);
+            out.status = SlotInfo::Status::missing;
+        }
+
+        return result;
+    }
+
+    void SlotManager::fromValueTree (const juce::ValueTree& tree)
+    {
+        const auto snapshot = readSnapshot (tree);
+
+        for (int i = 0; i < kNumSlots; ++i)
+        {
+            const auto index = static_cast<size_t> (i);
+            const auto& slot = snapshot[index];
+
+            {
+                const juce::ScopedLock state (stateLock);
+                history[index].clear();
+            }
+
+            if (slot.status == SlotInfo::Status::ready)
+            {
+                setSource (i, slot.source, slot.normalise, slot.autoTrim);
+            }
+            else if (slot.status == SlotInfo::Status::missing)
+            {
+                setMissing (i, slot.reference);
+            }
+            else
+            {
+                ++requestIds[index];
+                resetSlot (i, SlotInfo::Status::empty, {}); // not clear(): no history entry
+            }
         }
     }
 }

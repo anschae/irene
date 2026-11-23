@@ -59,6 +59,14 @@ namespace irene::ui
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
     };
 
+    /** The tall "add a slot" button: a large plus sign, drawn. */
+    class PlusButton final : public juce::TextButton
+    {
+    public:
+        PlusButton() : juce::TextButton ("+") {}
+        void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+    };
+
     /** A simple in-window dialog: a question with two buttons, a message with
         one, or a prompt with a text field and an optional checkbox. Covers its
         parent while visible. Used instead of native dialogs, which behave

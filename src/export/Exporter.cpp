@@ -40,7 +40,16 @@ namespace irene
     ExportSnapshot ExportSnapshot::capture (IReneProcessor& processor)
     {
         ExportSnapshot snapshot;
+        // The bare parameters (no Solo target, no A/B match gain), plus the
+        // auto-gain correction, which is part of the sound.
         snapshot.settings = processor.getParamRefs().read();
+
+        if (snapshot.settings.autoGainOn)
+        {
+            processor.updateLevelsNow();
+            snapshot.settings.autoGainDb = processor.getLevels().getAutoGainDb();
+        }
+
         snapshot.sessionRate = processor.getEngine().isPrepared() ? processor.getEngine().getSampleRate() : 48000.0;
 
         for (int i = 0; i < kNumSlots; ++i)

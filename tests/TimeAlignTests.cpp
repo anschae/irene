@@ -273,6 +273,7 @@ namespace
                 // Three copies of the same IR at different distances, one with flipped
                 // polarity. Perfectly aligned they must sum to exactly three times one of them.
                 IReneProcessor processor;
+                setParam (processor, "autogain", 0.0f); // this test measures how the mics add up
                 processor.setNonRealtime (true);
                 processor.prepareToPlay (kFs, 256);
 
@@ -330,6 +331,7 @@ namespace
             {
                 // IRs recorded at 48 kHz and 96 kHz in a 44.1 kHz session
                 IReneProcessor processor;
+                setParam (processor, "autogain", 0.0f); // this test measures how the mics add up
                 processor.setNonRealtime (true);
                 processor.prepareToPlay (44100.0, 256);
 
@@ -389,6 +391,7 @@ namespace
                 // With auto-trim on, a slot's leading silence is already removed, so
                 // the alignment must be based on the IR as it is actually played.
                 IReneProcessor processor;
+                setParam (processor, "autogain", 0.0f); // these tests measure how the mics add up
                 processor.setNonRealtime (true);
                 processor.prepareToPlay (kFs, 256);
 
@@ -410,6 +413,7 @@ namespace
             {
                 GlobalSettings::Shared()->set ({});
                 IReneProcessor processor;
+                setParam (processor, "autogain", 0.0f); // these tests measure how the mics add up
                 processor.prepareToPlay (kFs, 256);
                 processor.getSlots().setSource (0, makeSource (makeMicIR (4.0), kFs), false, false);
                 processor.getSlots().setSource (1, makeSource (makeMicIR (30.0), kFs), false, false);

@@ -27,7 +27,7 @@ namespace irene::ui
         int channels = 2;
     };
 
-    /** The global controls on the right: meters, dry/wet mix, output gain. */
+    /** The global controls on the right: meters, auto gain, dry/wet mix, output gain. */
     class GlobalSection final : public juce::Component,
                                 private juce::Timer
     {
@@ -43,6 +43,14 @@ namespace irene::ui
         IReneProcessor& processor;
         PeakMeter inputMeter { "IN" }, outputMeter { "OUT" };
         Knob mix { "MIX" }, outGain { "OUTPUT" };
+        ParamToggle autoGain { "Auto gain", colours::accent };
+        juce::Label autoGainReadout, matchReadout;
+
+    public:
+        juce::String getAutoGainTextForTests() const { return autoGainReadout.getText(); }
+        juce::String getMatchTextForTests() const { return matchReadout.getText(); }
+
+    private:
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalSection)
     };

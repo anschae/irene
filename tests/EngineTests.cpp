@@ -44,16 +44,30 @@ namespace
 
         void runTest() override
         {
-            beginTest ("Empty engine outputs silence (100 % wet, nothing loaded)");
+            beginTest ("Nothing loaded: the dry signal passes through (100 % wet)");
             {
                 Engine engine;
                 engine.prepare (kFs, 256, 2, 2);
 
-                const auto output = render (engine, makeNoise (2, 2000, 1), {}, { 256 });
-                expectEquals (output.getMagnitude (0, 2000), 0.0f);
+                const auto input = makeNoise (2, 2000, 1);
+                const auto output = render (engine, input, {}, { 256 });
+
+                for (int ch = 0; ch < 2; ++ch)
+                    expect (errorDb (output.getReadPointer (ch), input.getReadPointer (ch), 2000) < -140.0);
+
+                expect (! engine.hasAnyIR());
 
                 for (int i = 0; i < kNumSlots; ++i)
                     expect (engine.getSlot (i).isIdle());
+
+                // Muted slots are not "nothing loaded": a muted IR stays silent
+                Engine muted;
+                muted.getSlot (2).setIR (makeTestIR (1, 300, 2));
+                muted.prepare (kFs, 256, 2, 2);
+                EngineSettings settings;
+                settings.slots[2].mute = true;
+                expectEquals (render (muted, input, settings, { 256 }).getMagnitude (0, 2000), 0.0f);
+                expect (muted.hasAnyIR());
             }
 
             beginTest ("Convolution matches direct convolution, zero latency");
@@ -365,7 +379,7 @@ namespace
                 }
             }
 
-            beginTest ("Clearing a slot: silence, then idle");
+            beginTest ("Clearing the last slot: back to the dry signal, then idle");
             {
                 Engine engine;
                 engine.getSlot (0).setIR (makeTestIR (1, 300, 60));
@@ -379,7 +393,8 @@ namespace
                 engine.getSlot (0).setIR ({});
                 output = render (engine, input, {}, { 256 });
                 expect (engine.getSlot (0).isIdle());
-                expectEquals (output.getMagnitude (0, 12000, 12000), 0.0f);
+                expect (! engine.hasAnyIR());
+                expect (errorDb (output.getReadPointer (0) + 12000, input.getReadPointer (0) + 12000, 12000) < -140.0);
             }
 
             beginTest ("Real-time IR switching: background load, crossfade, no clicks");
@@ -424,9 +439,9 @@ namespace
                 };
 
                 runBlocks (20);
-                expectEquals (peakAfterSwitch, 0.0f); // nothing loaded yet
+                expectWithinAbsoluteError (peakAfterSwitch, 1.0f, 0.01f); // nothing loaded yet: dry
 
-                // empty -> IR A (gain 1) -> IR B (gain -0.5, inverted) -> empty
+                // dry -> IR A (gain 1) -> IR B (gain -0.5, inverted) -> dry again
                 engine.getSlot (0).setIR (makeDelta (1, 4, 0, 1.0f));
                 runBlocks (150);
                 expectWithinAbsoluteError (peakAfterSwitch, 1.0f, 0.01f);
@@ -443,7 +458,7 @@ namespace
 
                 peakAfterSwitch = 0.0f;
                 runBlocks (20);
-                expectEquals (peakAfterSwitch, 0.0f);
+                expectWithinAbsoluteError (peakAfterSwitch, 1.0f, 0.01f); // dry again
                 expect (engine.getSlot (0).isIdle());
 
                 expect (worstStep < 3.0f * sineStep, "Largest step " + juce::String (worstStep, 5));

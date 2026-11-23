@@ -10,8 +10,11 @@ namespace irene
 {
     /** The complete real-time signal path:
 
-        Input -> Input Filter Block -> slots (summed = wet) -> Dry/Wet Mix
-              -> Output Filter Block -> Output Gain -> Output
+        Input -> Input Filter Block -> slots (summed, x auto gain = wet) -> Dry/Wet Mix
+              -> Output Filter Block -> Output Gain -> A/B match gain -> Output
+
+        While no slot holds an IR, the dry signal passes through instead of the
+        (silent) wet signal; the change is crossfaded.
 
         Latency is zero (the convolution runs in its zero-latency mode), so the
         dry signal needs no delay compensation to stay aligned with the wet path.
@@ -38,6 +41,9 @@ namespace irene
         SlotDsp& getSlot (int index) noexcept { return *slots[static_cast<size_t> (index)]; }
 
         //==============================================================================
+        /** True if at least one slot holds an IR (audio thread state; any thread may read). */
+        bool hasAnyIR() const noexcept { return anyIR.load (std::memory_order_relaxed); }
+
         /** Peak level since the last call (0 if the channel doesn't exist). Any thread. */
         float readInputPeak (int channel) noexcept { return inputPeak[static_cast<size_t> (channel)].exchange (0.0f); }
         float readOutputPeak (int channel) noexcept { return outputPeak[static_cast<size_t> (channel)].exchange (0.0f); }
@@ -50,7 +56,7 @@ namespace irene
 
         FilterBlock inputFilter, outputFilter;
         juce::AudioBuffer<float> work, wet;
-        juce::SmoothedValue<float> mix, outGain;
+        juce::SmoothedValue<float> mix, outGain, autoGain, dryFill;
         bool snapSmoothers = true;
 
         double sampleRate = 44100.0;
@@ -58,6 +64,7 @@ namespace irene
         bool prepared = false;
 
         std::array<std::atomic<float>, 2> inputPeak {}, outputPeak {};
+        std::atomic<bool> anyIR { false };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Engine)
     };

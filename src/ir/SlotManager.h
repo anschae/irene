@@ -124,6 +124,32 @@ namespace irene
             so the state is self-contained. */
         juce::ValueTree toValueTree (bool embedAudio) const;
 
+        //==============================================================================
+        /** Everything a slot holds (its IR, not its parameters), e.g. for A/B. */
+        struct SlotSnapshot
+        {
+            SlotInfo::Status status = SlotInfo::Status::empty;
+            IRSource::Ptr source;  // set if status == ready
+            IRReference reference; // also set if status == missing
+            bool normalise = true, autoTrim = false;
+        };
+
+        using Snapshot = std::array<SlotSnapshot, kNumSlots>;
+
+        Snapshot capture() const;
+
+        /** Puts a snapshot back. Returns at once: the IRs are prepared on the
+            loader thread and crossfaded in. The audition history is cleared. */
+        void restoreAsync (const Snapshot&);
+
+        /** Serialisation of a snapshot (the same format as toValueTree). */
+        static juce::ValueTree snapshotToValueTree (const Snapshot&, bool embedAudio);
+
+        /** Reads a snapshot from a tree written by toValueTree/snapshotToValueTree.
+            Blocking: IRs without embedded audio are read from disk. Doesn't
+            change any slot. */
+        Snapshot readSnapshot (const juce::ValueTree&) const;
+
         /** Restores all slots (blocking). Slots without embedded audio are loaded
             from their path if the file exists, otherwise marked as missing. */
         void fromValueTree (const juce::ValueTree& tree);

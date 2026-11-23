@@ -160,7 +160,7 @@ namespace
                 auto* irene = dynamic_cast<IReneEditor*> (editor.get());
                 expect (irene != nullptr && irene->isBrowserOpen());
                 const auto baseWidth = irene != nullptr ? irene->getBaseWidth() : 0;
-                expectEquals (baseWidth, IReneEditor::kBaseWidth + GlobalSettings::kDefaultBrowserWidth + IReneEditor::kGap);
+                expectEquals (baseWidth, IReneEditor::baseWidthFor (kDefaultVisibleSlots) + GlobalSettings::kDefaultBrowserWidth + IReneEditor::kGap);
                 expectEquals (editor->getWidth(), baseWidth);
                 expectEquals (editor->getHeight(), IReneEditor::kBaseHeight);
 
@@ -183,7 +183,7 @@ namespace
                 // Closing the browser makes the window narrower at the same scale
                 settings->update ([] (auto& s) { s.browserOpen = false; });
                 pumpMessages();
-                expectEquals (editor->getWidth(), juce::roundToInt (IReneEditor::kBaseWidth * 1.25f));
+                expectEquals (editor->getWidth(), juce::roundToInt (IReneEditor::baseWidthFor (kDefaultVisibleSlots) * 1.25f));
                 editor->createComponentSnapshot (editor->getLocalBounds());
 
                 // Parameter changes while the editor is open

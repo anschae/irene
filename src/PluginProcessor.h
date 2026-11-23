@@ -2,7 +2,10 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <optional>
+
 #include "Config.h"
+#include "analysis/Response.h"
 #include "analysis/TimeAlign.h"
 #include "app/GlobalSettings.h"
 #include "app/PresetManager.h"
@@ -55,8 +58,54 @@ namespace irene
         const ParamRefs& getParamRefs() const noexcept { return paramRefs; }
 
         /** What the engine plays: the parameters plus the browser's "Solo
-            target" mode. Real-time safe. Export uses the bare parameters. */
-        EngineSettings readSettings() const noexcept;
+            target" mode and, with `withDerivedGains`, the auto-gain correction
+            and the A/B match gain. Real-time safe. */
+        EngineSettings readSettings (bool withDerivedGains = true) const noexcept;
+
+        /** Spectra of the slot IRs and the level measurements behind auto gain
+            and A/B matching (background threads, always running). */
+        analysis::SpectrumWorker& getSpectra() noexcept { return spectrumWorker; }
+        analysis::LevelWorker& getLevels() noexcept { return levelWorker; }
+
+        /** Brings spectra and levels up to date now (blocking; for tests and export). */
+        void updateLevelsNow();
+
+        //==============================================================================
+        /** Slots shown in the editor: at least kDefaultVisibleSlots, and always
+            enough to show every slot that holds (or is missing) an IR. Saved
+            with the project and with presets. Message thread. */
+        int getVisibleSlots() const;
+
+        /** "+": shows one more slot. Returns false if all are shown already. */
+        bool addVisibleSlot();
+
+        /** "x": hides the last slot. Only possible if it is empty and more than
+            kDefaultVisibleSlots are shown; its parameters go back to their
+            defaults, so a hidden slot never affects the sound. */
+        bool canHideLastSlot() const;
+        bool hideLastSlot();
+
+        //==============================================================================
+        /** A/B comparison of two complete setups (all parameters, the slot IRs
+            and the number of visible slots). The active setup is what plays; the
+            other one waits. Message thread. */
+        int getActiveSetup() const noexcept { return activeSetup.load(); } // 0 = A, 1 = B
+        bool hasOtherSetup() const;
+        void switchToSetup (int setup);
+
+        /** Copies the active setup over the other one ("A > B" / "B > A"). */
+        void copyActiveSetupToOther();
+
+        /** Loudness matching: B is played at A's loudness (A is the reference). */
+        bool isLoudnessMatchOn() const noexcept { return loudnessMatch.load(); }
+        void setLoudnessMatch (bool shouldMatch);
+
+        /** The match gain currently applied (0 unless B is active and matching is on). */
+        float getMatchGainDb() const noexcept;
+
+        /** Sends a change message when the visible slots, the A/B state or the
+            notes change, or a project/preset was loaded. */
+        Broadcaster& getUiChanges() noexcept { return uiChanges; }
 
         /** The browser's "Solo target" mode: only the browser's target slot is
             heard. Not saved; the editor switches it off when it closes. */
@@ -147,14 +196,45 @@ namespace irene
 
         GlobalSettings::Shared globalSettings;
         IRLibrary::Shared library;
+        void migrateOldState (const juce::ValueTree& parameters);
+        int highestUsedSlot() const;
+
+        struct Setup
+        {
+            juce::ValueTree parameters;
+            SlotManager::Snapshot slots;
+            int visibleSlots = kDefaultVisibleSlots;
+        };
+
+        Setup captureSetup();
+        void applySetup (const Setup&);
+        juce::ValueTree setupToValueTree (const Setup&, bool embedAudio) const;
+        Setup setupFromValueTree (const juce::ValueTree&) const;
+        float liveWetLoudness (bool& valid) const;
+
         std::array<juce::StringArray, kNumSlots> slotListContexts;
         mutable juce::CriticalSection notesLock;
         juce::String notes;
+
+        std::atomic<int> visibleSlots { kDefaultVisibleSlots };
+
+        std::atomic<int> activeSetup { 0 };
+        mutable juce::CriticalSection setupLock;
+        std::optional<Setup> otherSetup; // the setup that is not playing (empty until first used); setupLock
+        std::atomic<bool> loudnessMatch { false };
+        std::atomic<float> referenceLoudnessDb { 0.0f }; // A's loudness, remembered while B plays
+        std::atomic<bool> referenceLoudnessValid { false };
+
+        Broadcaster uiChanges;
         juce::AudioProcessorValueTreeState apvts;
         ParamRefs paramRefs;
         Engine engine;
         SlotManager slotManager;
         PresetManager presets { *this };
+
+        // Last: their threads use the members above.
+        analysis::SpectrumWorker spectrumWorker { slotManager };
+        analysis::LevelWorker levelWorker;
 
         JUCE_DECLARE_WEAK_REFERENCEABLE (IReneProcessor)
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IReneProcessor)

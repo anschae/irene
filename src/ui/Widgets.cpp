@@ -249,4 +249,15 @@ namespace irene::ui
                           start.x + size * 0.45f, start.y + size * 0.55f);
         g.fillPath (head);
     }
+
+    void PlusButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+    {
+        getLookAndFeel().drawButtonBackground (g, *this, findColour (juce::TextButton::buttonColourId), highlighted, down);
+
+        const auto centre = getLocalBounds().toFloat().getCentre();
+        const auto half = juce::jmin (static_cast<float> (getWidth()) * 0.3f, 8.0f);
+        g.setColour (highlighted ? colours::text : colours::textDim);
+        g.fillRect (juce::Rectangle<float> (half * 2.0f, 2.0f).withCentre (centre));
+        g.fillRect (juce::Rectangle<float> (2.0f, half * 2.0f).withCentre (centre));
+    }
 }

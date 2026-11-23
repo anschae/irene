@@ -70,6 +70,38 @@ namespace irene
         addChildComponent (notesPanel);
         notesPanel.onClose = [this] { notesPanel.setVisible (false); };
 
+        addSlotButton.setTooltip ("Add a slot (up to " + juce::String (kNumSlots) + "). An empty last slot can be hidden again with its x.");
+        addSlotButton.onClick = [&p, this]
+        {
+            p.addVisibleSlot();
+            editor.updateVisibleSlots();
+        };
+        addAndMakeVisible (addSlotButton);
+
+        setupA.setTooltip ("A/B comparison: play setup A");
+        setupB.setTooltip ("A/B comparison: play setup B. The first time, B starts as a copy of A.");
+        copySetup.setTooltip ("Copy the setup you are hearing to the other one");
+        matchButton.setTooltip ("Loudness match: play B at the same loudness as A, so you compare the sound, not the level");
+
+        for (auto* b : { &setupA, &setupB })
+        {
+            b->setClickingTogglesState (true);
+            b->setRadioGroupId (0xab);
+            b->setColour (juce::TextButton::buttonOnColourId, colours::accent);
+        }
+
+        matchButton.setClickingTogglesState (true);
+        matchButton.setColour (juce::TextButton::buttonOnColourId, colours::solo);
+        matchButton.setColour (juce::TextButton::textColourOnId, colours::background);
+
+        setupA.onClick = [&p, this] { if (setupA.getToggleState()) { p.switchToSetup (0); editor.updateVisibleSlots(); editor.updateSetupButtons(); } };
+        setupB.onClick = [&p, this] { if (setupB.getToggleState()) { p.switchToSetup (1); editor.updateVisibleSlots(); editor.updateSetupButtons(); } };
+        copySetup.onClick = [&p, this] { p.copyActiveSetupToOther(); editor.updateSetupButtons(); };
+        matchButton.onClick = [&p, this] { p.setLoudnessMatch (matchButton.getToggleState()); };
+
+        for (auto* b : { &setupA, &setupB, &copySetup, &matchButton })
+            addAndMakeVisible (b);
+
         addChildComponent (confirm);
     }
 
@@ -92,6 +124,14 @@ namespace irene
         exportButton.setBounds (header.removeFromRight (96).reduced (0, 2));
         header.removeFromRight (6);
         notesButton.setBounds (header.removeFromRight (70).reduced (0, 2));
+        header.removeFromRight (14);
+        matchButton.setBounds (header.removeFromRight (60).reduced (0, 2));
+        header.removeFromRight (4);
+        copySetup.setBounds (header.removeFromRight (54).reduced (0, 2));
+        header.removeFromRight (4);
+        setupB.setBounds (header.removeFromRight (30).reduced (0, 2));
+        header.removeFromRight (2);
+        setupA.setBounds (header.removeFromRight (30).reduced (0, 2));
         header.removeFromLeft (20);
         header.removeFromRight (20);
         presetBar.setBounds (header.removeFromLeft (juce::jmin (header.getWidth(), 520)).reduced (0, 2));
@@ -115,14 +155,24 @@ namespace irene
         filterEditor.setBounds (area.removeFromTop (176));
         area.removeFromTop (8);
 
-        const auto gap = 8;
-        const auto stripWidth = (area.getWidth() - (kNumSlots - 1) * gap) / kNumSlots;
+        const auto visible = editor.getVisibleSlots();
+        const auto stripWidth = stripWidthFor (visible);
 
-        for (auto* strip : strips)
+        for (int i = 0; i < strips.size(); ++i)
         {
-            strip->setBounds (area.removeFromLeft (stripWidth));
-            area.removeFromLeft (gap);
+            strips[i]->setVisible (i < visible);
+
+            if (i < visible)
+            {
+                strips[i]->setBounds (area.removeFromLeft (stripWidth));
+                area.removeFromLeft (kGap);
+            }
         }
+
+        addSlotButton.setVisible (visible < kNumSlots);
+
+        if (visible < kNumSlots)
+            addSlotButton.setBounds (area.removeFromLeft (kAddSlotWidth));
 
         settingsPanel.setBounds (getLocalBounds());
         exportPanel.setBounds (getLocalBounds());
@@ -179,6 +229,11 @@ namespace irene
             strip->onToggleFavourite = [this, i] { toggleSlotFavourite (i); };
             strip->onAlign = [this, i] { alignToSlot (i); };
             strip->onGoBack = [this, i] { goBack (i); };
+            strip->onHide = [this]
+            {
+                plugin.hideLastSlot();
+                updateVisibleSlots();
+            };
         }
 
         content.browser.onLoadIntoSlot = [this] (int slot, const juce::File& file, const juce::StringArray& list)
@@ -223,6 +278,11 @@ namespace irene
         plugin.getGlobalSettings().addListener (this);
         plugin.getLibrary().addListener (this);
         plugin.getSlots().addListener (this);
+        plugin.getUiChanges().addListener (this);
+
+        visibleSlots = plugin.getVisibleSlots();
+        content.filterEditor.setVisibleSlots (visibleSlots);
+        updateSetupButtons();
 
         browserOpen = plugin.getGlobalSettings().get().browserOpen;
         browserWidth = plugin.getGlobalSettings().get().browserWidth;
@@ -236,6 +296,7 @@ namespace irene
     IReneEditor::~IReneEditor()
     {
         stopTimer();
+        plugin.getUiChanges().removeListener (this);
 
         // "Solo target" belongs to the open window: never leave the plugin
         // playing a single slot with nothing on screen to say so.
@@ -297,9 +358,19 @@ namespace irene
     void IReneEditor::broadcasterChanged (Broadcaster* source)
     {
         if (source == &plugin.getGlobalSettings())
+        {
             applyGlobalSettings();
+        }
+        else if (source == &plugin.getUiChanges())
+        {
+            updateVisibleSlots();
+            updateSetupButtons();
+            updateNotesButton();
+        }
         else
+        {
             refreshStrips();
+        }
     }
 
     void IReneEditor::applyGlobalSettings()
@@ -341,9 +412,37 @@ namespace irene
             content.browser.showAsCurrent (restored.path);
     }
 
+    void IReneEditor::updateVisibleSlots()
+    {
+        const auto visible = plugin.getVisibleSlots();
+
+        for (int i = 0; i < kNumSlots; ++i)
+            content.strips[i]->setHideButtonVisible (i == visible - 1 && plugin.canHideLastSlot());
+
+        if (visible == visibleSlots)
+            return;
+
+        visibleSlots = visible;
+        content.filterEditor.setVisibleSlots (visible);
+        content.filterEditor.selectTab (plugin.uiState.filterTab.load());
+        selectTargetSlot (plugin.uiState.targetSlot.load());
+        applyScale (currentScale); // the window gets wider or narrower
+    }
+
+    void IReneEditor::updateSetupButtons()
+    {
+        const auto active = plugin.getActiveSetup();
+        content.setupA.setToggleState (active == 0, juce::dontSendNotification);
+        content.setupB.setToggleState (active == 1, juce::dontSendNotification);
+        content.copySetup.setButtonText (active == 0 ? "A > B" : "B > A");
+        content.copySetup.setTooltip (active == 0 ? "Copy setup A over setup B" : "Copy setup B over setup A");
+        content.matchButton.setToggleState (plugin.isLoudnessMatchOn(), juce::dontSendNotification);
+    }
+
     void IReneEditor::refreshStrips()
     {
         updateNotesButton(); // the project may have been reloaded
+        updateVisibleSlots();
         for (int i = 0; i < kNumSlots; ++i)
         {
             const auto info = plugin.getSlots().getInfo (i);
@@ -394,7 +493,7 @@ namespace irene
     //==============================================================================
     void IReneEditor::selectTargetSlot (int slot)
     {
-        slot = juce::jlimit (0, kNumSlots - 1, slot);
+        slot = juce::jlimit (0, visibleSlots - 1, slot);
         plugin.uiState.targetSlot = slot;
 
         for (int i = 0; i < kNumSlots; ++i)

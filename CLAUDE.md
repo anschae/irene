@@ -7,7 +7,8 @@ Read `README.md` first: its "Design decisions" and "Known gaps" sections record 
 ## Rules that must not be broken
 
 - **Never rename a parameter ID.** DAW projects and automation depend on them. New parameters get a higher version hint. `tests/ProcessorTests.cpp` ("Parameter IDs are stable") has the full list written out by hand on purpose.
-- **Nothing per-slot is written out by hand.** All slot code (DSP, parameters, UI, state, presets) loops over `kNumSlots` in `src/Config.h`. Check a change by building once with `kNumSlots = 5`.
+- **Nothing per-slot is written out by hand.** All slot code (DSP, parameters, UI, state, presets) loops over `kNumSlots` in `src/Config.h` (5 since 0.3). Check a change by building once with `kNumSlots = 6` (the tests written for exactly five slots skip themselves then).
+- **New parameters go at the end of the layout** with version hint 2 or higher (`versionHintFor` in `Parameters.cpp`), and a migration if old projects must keep their sound (see `IReneProcessor::migrateOldState`, which switches `autogain` off for states that don't have it).
 - **Audio thread:** no allocation, locks, file I/O or logging. Try-locks that never block are fine. Smooth every continuous parameter.
 - **State compatibility:** project state and presets carry version fields. Old projects must keep loading; unknown attributes in `library.xml` must be preserved on save.
 - **Don't fake features.** If something isn't finished, say so in the README and to the owner.
@@ -44,10 +45,10 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 | `src/ir/` | `IRSource` (original audio, immutable), `IRProcessing` (resample, normalise, trim), `SlotManager` (owns the IRs, background loading, state) |
 | `src/library/` | `IRLibrary`: favourites, recent, scan index, background scanner (global, shared) |
 | `src/app/` | `GlobalSettings`, `PresetManager`, `Broadcaster` |
-| `src/analysis/` | `Response`: frequency response maths and the spectrum worker. `TimeAlign`: cross-correlation alignment of slots (pure functions; `IReneProcessor::alignSlots` applies the result) |
+| `src/analysis/` | `Response`: frequency response maths, `computeLevels` (loudness for auto gain and A/B), `SpectrumWorker` and `LevelWorker` (background threads owned by the processor). `TimeAlign`: cross-correlation alignment of slots (pure functions; `IReneProcessor::alignSlots` applies the result) |
 | `src/export/` | "Export as single IR" |
 | `src/ui/`, `src/PluginEditor.*` | Editor. Everything sits in a fixed-size `Content` component that is scaled as a whole. Its width depends on `kNumSlots` and on the browser width (a global setting, dragged with `IReneEditor::BrowserResizer`) |
-| `tests/` | JUCE `UnitTest`s, one file per area. `TestHelpers.h` has IR generators, reference convolution, WAV writing. `WorkflowTests.cpp` covers the step-1 features (folder names, browser layout, history, Solo target, notes) |
+| `tests/` | JUCE `UnitTest`s, one file per area. `TestHelpers.h` has IR generators, reference convolution, WAV writing. `WorkflowTests.cpp` covers the step-1 features (folder names, browser layout, history, Solo target, notes), `LevelsAndSlotsTests.cpp` step 2 (auto gain, visible slots, A/B, mono processing, migrations) |
 | `tools/Snapshot.cpp` | Editor-to-PNG renderer |
 
 ## Things that were learned the hard way
@@ -67,6 +68,12 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 - **The browser's rows are refreshed asynchronously** (after the library's change message). Code that acts on the current state, such as toggling a favourite, must ask the library, not the cached `Row`.
 - **`juce::TextEditor::setText (..., true)` reports the change asynchronously.** Tests must pump the message loop before checking the result.
 - **Browser column layout:** only changes made by the user are stored (`tableColumnsResized` while the header has the mouse, or `tableColumnsChanged`); the stretch-to-fit resizing that follows from the browser's width must not overwrite the stored layout. Width and columns are read only when an editor opens, so one instance never resizes another.
+- **Auto gain and the A/B match gain are derived values, not parameters.** `LevelWorker` works them out in the background; `IReneProcessor::readSettings()` puts them into `EngineSettings::autoGainDb/matchGainDb`; the engine smooths them. Export captures auto gain (via `updateLevelsNow()`) but never the match gain; the display shows auto gain. In non-realtime rendering `processBlock` updates the levels synchronously before each block (offline renders run far faster than the worker's 20 ms poll, and tests depend on it being deterministic).
+- **Tests that measure how slots add up must switch `autogain` off** (a new processor has it on). Tests that render through the processor in real-time mode can't rely on auto gain having been worked out yet; use `setNonRealtime (true)` or `updateLevelsNow()`.
+- **The editor's width depends on the visible slot count** (`IReneEditor::baseWidthFor`). The processor's `getUiChanges()` broadcaster tells the editor about visible-slot, A/B and project changes.
+- **`juce::Button::triggerClick()` is asynchronous.** In the snapshot tool (and tests), pump the message loop after it before changing anything else, or the change lands before the click.
+- **Old projects:** state version 1 (0.1/0.2) had three slots, so the Output filter tab was index 4; `restoreState` maps it to `kNumSlots + 1`. Slots missing from a saved state are empty.
+- **Mono processing in `SlotDsp`:** see the comments there. A mono IR that replaced a stereo one keeps processing two channels (`stereoLocked`), because JUCE's crossfade needs the old engine's right channel; going from mono to stereo processing copies the left channel's delay and filter memory to the right.
 - **Analytic test IRs** (`makeMicIR` in `tests/TimeAlignTests.cpp`) are defined in continuous time and can be sampled with any fractional delay or sample rate without interpolation error. Prefer them over noise when timing matters.
 
 ## CI and releases
@@ -78,7 +85,7 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 
 ## Status and backlog
 
-Version 0.2.0 = 0.1.0 + automatic time-alignment + step 1 (below). The owner has used 0.1.0 in Cubase and it works; the step-1 features have not been tried in a DAW yet. Expect reports about right-click menus, dragging the browser edge (the plugin resizes its own window) and keyboard focus.
+Version 0.3.0 = 0.1.0 + automatic time-alignment + steps 1 and 2 (below). The owner has used 0.1.0 in Cubase and it works; steps 1 and 2 have not been tried in a DAW yet (he asked for step 2 before trying step 1). Expect reports about right-click menus, window resizing (browser edge, + and ×), keyboard focus, A/B switching and how auto gain sounds.
 
 **Time-alignment, open points** (see "Automatic time-alignment" in the README for how it behaves):
 
@@ -89,7 +96,7 @@ Version 0.2.0 = 0.1.0 + automatic time-alignment + step 1 (below). The owner has
 **The plan agreed with the owner** (Nov 2026). Work in steps; each step is pushed, green in CI, released by the owner and tried in Cubase before the next one starts, because steps 2 and 3 add parameters that become permanent once released.
 
 1. ~~**Browser and workflow**~~ (done, 0.2.0): folder display names (right-click and Settings), right-click menus (rename, open/show in Finder/Explorer, load into any slot, favourite), resizable browser width and column widths, column visibility remembered globally, per-slot "back to previous IR", "Solo target" while browsing, notepad, mono export default.
-2. **Levels and slots:** dry signal passes through when no IR is loaded (only when no slot has an IR; muting all slots stays silent); auto gain for the slot blend (keep loudness the same with 1..n slots, solo, mute; on for new instances, off for existing projects so they sound unchanged; the same machinery gives A/B loudness matching); `kNumSlots = 5` with a layout that still fits a normal screen at 100 % (show the owner snapshots first); A/B comparison of two complete setups; mono CPU optimisation.
+2. ~~**Levels and slots**~~ (done, 0.3.0): dry signal when no slot has an IR; auto gain (only turns down: loudest single slot vs. the blend; on for new instances, off for old states); `kNumSlots = 5` with 3 shown by default, "+" to add, "×" to hide an empty last slot (agreed with the owner), narrower strips for 4–5; A/B of complete setups with loudness match (B matched to A); mono processing.
 3. **EQ and display:** more EQ bands with a type per band; draggable EQ points on the display using FabFilter Pro-Q 4's mouse and key conventions (check its manual); a band switches on as soon as its gain is changed; waveform view of the slots; "align as heard" option. **Open question for the owner:** how many bands and in which filter blocks (6 everywhere is ~250 EQ parameters with 5 slots; suggested 6 on input/output and 4 per slot).
 4. **Extras:** tags and ratings in the browser (the library file already preserves unknown attributes); minimum-phase option per slot.
 

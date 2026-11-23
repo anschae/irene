@@ -19,7 +19,7 @@ namespace irene::ui
     }
 
     ResponseDisplay::ResponseDisplay (IReneProcessor& p)
-        : processor (p), worker (p.getSlots())
+        : processor (p), worker (p.getSpectra())
     {
         channelBox.addItem ("Mid (L+R)", 1);
         channelBox.addItem ("Left", 2);
@@ -55,8 +55,14 @@ namespace irene::ui
         };
         addAndMakeVisible (slotsButton);
 
-        worker.onSpectraChanged = [this] { dirty = true; };
+        worker.addListener (this);
         startTimerHz (kRefreshHz);
+    }
+
+    ResponseDisplay::~ResponseDisplay()
+    {
+        stopTimer();
+        worker.removeListener (this);
     }
 
     void ResponseDisplay::setHighlightedBlock (int tabIndex, juce::Colour colour)

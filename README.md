@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: version 0.2.0.** Version 0.1.0 plus automatic time-alignment and the browser and workflow improvements of step 1 (see [Roadmap](#roadmap)). The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. Version 0.1.0 has been used in Cubase; the step-1 features have not been tried in a DAW yet (see [Known gaps](#known-gaps)).
+> **Status: version 0.3.0.** Version 0.1.0 plus automatic time-alignment, step 1 (browser and workflow) and step 2 (levels, five slots, A/B) — see [Roadmap](#roadmap). The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. Version 0.1.0 has been used in Cubase; the features of steps 1 and 2 have not been tried in a DAW yet (see [Known gaps](#known-gaps)).
 
 ## Download
 
@@ -76,7 +76,7 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 Agreed with the owner after 0.1.0, in steps that are each released and tried in a DAW before the next:
 
 10. **Step 1, browser and workflow** (version 0.2.0): favourite-folder display names, right-click menus, resizable browser and columns (remembered), "back to the previous IR" per slot, "Solo target" while browsing, notepad, mono export by default ← *done*
-11. **Step 2, levels and slots:** dry signal when no IR is loaded, auto gain for the slot blend, 5 slots, A/B comparison (loudness-matched), lower CPU on mono tracks
+11. **Step 2, levels and slots** (version 0.3.0): dry signal when no IR is loaded, auto gain for the slot blend, 5 slots (3 shown, "+" for more), A/B comparison with loudness matching, lower CPU on mono tracks ← *done*
 12. **Step 3, EQ and display:** more EQ bands, draggable EQ points with FabFilter Pro-Q-style mouse and key controls, a band switches on when its gain is changed, waveform view of the slots, "align as heard"
 13. **Step 4, extras:** tags and ratings in the browser, minimum-phase option per slot
 
@@ -85,7 +85,8 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 - **JUCE version:** pinned to `9.0.5`. The spec said JUCE 8, but that line now only receives security patches, while JUCE 9 has the same licence terms and system requirements. The tag is set in one place at the top of `CMakeLists.txt`.
 - **Licence note:** JUCE is dual-licensed (AGPLv3 or a JUCE licence). That matters only if you distribute the plugin to others.
 - **Plugin identity** (name, manufacturer, codes, bundle id, version) is defined once, at the top of `CMakeLists.txt`.
-- **Number of IR slots:** the constant `kNumSlots` in `src/Config.h`.
+- **Number of IR slots:** the constant `kNumSlots` in `src/Config.h` (5 since 0.3; `kDefaultVisibleSlots` = 3 are shown in a new instance).
+- **Parameter version hints:** everything that existed in 0.1/0.2 has hint 1; slots 4 and 5 and `autogain` (0.3) have hint 2 (`versionHintFor` in `Parameters.cpp`). New parameters are added after all existing ones, so no parameter changes position.
 - **CI runners are pinned** to known toolchains (`macos-15`, `windows-2022`, `ubuntu-24.04`) rather than `*-latest`, so a runner update can't break the build unannounced.
 - **pluginval strictness is 10** (the maximum), above the required 5.
 - **dB parameters snap by rounding the value** to 0.01 dB rather than using JUCE's range interval, so that 0 dB is exactly 0 dB on every CPU (on Apple Silicon the interval method gave −0.0000013 dB as the default).
@@ -123,6 +124,31 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 - **Browser width and columns are global settings.** Every new plugin window (in any DAW) opens with the width and columns used last. A window that is already open keeps its own layout until it is closed, so that changing one instance never resizes another.
 - **"Solo target"** (button at the bottom of the browser). While it is on, only the browser's target slot is heard, even if that slot is muted, so you can judge the IR you are auditioning on its own; the other slots are dimmed and marked "Not heard". It follows the target slot when you click another slot. It is not a parameter and isn't saved: it turns off when the plugin window closes or the browser is hidden, so the plugin never plays a single slot with nothing on screen to show it. The frequency display shows what you hear; "Export as single IR" ignores it.
 
+### Slots 4 and 5
+
+- **Five slots, three shown.** A new instance shows three slots. The **+** column after the last slot adds slot 4, then slot 5; the window gets wider, as it does when the browser opens. With four or five slots the strips are narrower (250 instead of 315 at 100 %) but keep all their controls. At 100 % with the browser open, five slots make the window about 1750 pixels wide; use the 75 % UI scale on a small screen.
+- **Hiding a slot:** the last slot gets a small **×** when it is empty and more than three are shown. Hiding it puts its settings (gain, EQ, mute, solo...) back to their defaults, so a hidden slot never affects the sound. A slot with an IR can't be hidden, and a slot that holds an IR is always shown (e.g. when a project or preset uses slot 5).
+- **The number of shown slots is saved** with the project and with presets. "Init" goes back to three. Projects and presets from before 0.3 open with three.
+- **All five slots always exist as parameters,** so the DAW's automation list always shows five slots. That is what keeps automation and old projects safe. Hidden slots are empty and cost no CPU.
+- **Filter tabs, the Swap menu and "Load into Slot..."** only list the shown slots.
+
+### Auto gain
+
+- **What it does:** keeps the blend about as loud as its loudest slot on its own. Two equally loud slots that add up to +6 dB are turned down by 6 dB; soloing one of them then sounds just as loud as the blend. It replaces the extra loudness that comes from adding slots together, nothing else: one slot on its own is never changed, so the slot Gain knobs still do what they say.
+- **It only ever turns down** (by up to 24 dB). Slots that partly cancel each other (out of phase, misaligned) are not turned up, so you still hear when a blend loses level through cancellation.
+- **How it measures:** the same loudness measure as IR normalisation (pink-noise weighted, 80 Hz – 8 kHz), worked out from the slot IRs with their gain, pan, delay, polarity and filter block; on a stereo track, left and right are averaged. Input/output filter blocks, mix and output gain don't affect it.
+- **The button** sits in the right-hand column (Auto gain); below it, the correction applied at the moment. It is a parameter (ID `autogain`), saved with projects and presets and automatable.
+- **On in new instances, off in old projects:** projects and presets from before 0.3 open with Auto gain off, so they sound exactly as before.
+- **Timing:** the correction is worked out on a background thread when something changes and is smoothed over 80 ms, so a level change while you turn a knob follows within a few hundredths of a second. During an offline render (export/bounce) it is worked out before every block instead, so automation is followed exactly.
+- **Export and display include it**, since it is part of the sound.
+
+### A/B comparison
+
+- **A and B are two complete setups:** all parameters, the slot IRs (with their Norm/Trim options) and the number of shown slots. The buttons **A** and **B** in the header switch between them; the first switch to B makes B a copy of A. **A > B** (or **B > A**) copies the setup you are hearing over the other one.
+- **Switching** changes the parameters at once (the DAW sees them like a preset load) and crossfades the IRs in, as when loading an IR. The "back" history of the slots starts afresh.
+- **Match** plays B at A's loudness, so you compare the sound and not the level. A is the reference and is never changed; B gets a correction gain (shown below Auto gain in the right-hand column, e.g. "B −2.5 dB"), up to ±24 dB. A's loudness is measured when you switch from A to B. The match gain is not part of B's settings and is never exported.
+- **Saved with the project:** which setup is playing, the other setup (with its IR audio), Match and A's measured loudness. Presets only contain the setup that is playing; loading one replaces it and leaves the other alone.
+
 ### Back to the previous IR
 
 - **The ↶ button on each slot** (left of < and >) puts back the IR that was in the slot before. Click it again to go further back. It undoes loading a file (from the browser, prev/next, drag and drop, the file dialog or the right-click menu) and **Clear**. Going back far enough empties the slot again if it started empty.
@@ -148,7 +174,7 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 
 ### Frequency display
 
-- **What it shows:** the magnitude response of the wet path. Each slot's IR (as played: resampled, trimmed, normalised) is combined with its filter block, delay, phase, gain and pan; the slots are added as complex values, so cancellation between slots is visible; then the input and output filter blocks are applied. The dry/wet mix and the output gain are not included.
+- **What it shows:** the magnitude response of the wet path. Each slot's IR (as played: resampled, trimmed, normalised) is combined with its filter block, delay, phase, gain and pan; the slots are added as complex values, so cancellation between slots is visible; auto gain is applied; then the input and output filter blocks. The dry/wet mix, the output gain and the A/B match gain are not included. Each slot's own curve is its share of the blend (with auto gain).
 - **It matches the audio:** a unit test measures the real engine with an impulse and requires the displayed curve to agree within 0.05 dB on left, right and mid.
 - **Range:** 20 Hz to 20 kHz, +24 to −60 dB, 48 points per octave.
 - **Smoothing** (1/6 or 1/3 octave) averages power and only affects the picture.
@@ -161,6 +187,7 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 
 - **How it is rendered:** a separate, private copy of the audio engine is fed a single impulse, offline, on a background thread. It runs the same DSP code as the plugin, so the exported IR reproduces the wet path: in the unit test, noise through the plugin and the same noise convolved with the exported IR differ by about −90 dB (the requirement was −60 dB).
 - **Mono export** is what the plugin produces on a mono track: pan is ignored and stereo IRs are summed.
+- **Auto gain is included**, the A/B match gain and "Solo target" are not: the export is the setup that is playing, as it sounds.
 - **Sample rate:** every IR is converted from its original file straight to the export rate, not via the session rate.
 - **Auto length** ends the IR where the tail has dropped 90 dB below the peak, looking at up to 3 seconds beyond the longest IR (filters ring on), at most 12 seconds in total. A 5 ms fade-out is always applied.
 - **24-bit files and overs:** if the IR peaks above 0 dBFS, a 24-bit export is refused with a message rather than written clipped. Use peak normalisation or 32-bit float.
@@ -180,7 +207,7 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 
 ### Sound and signal flow
 
-- **Nothing loaded means silence.** The mix defaults to 100 % wet and an empty slot outputs nothing, so a fresh instance is silent until an IR is loaded.
+- **Nothing loaded means dry signal.** While no slot holds an IR, the input passes through as if the mix were at 0 % (input and output filter blocks and output gain still apply). Loading the first IR crossfades from the dry signal to the IR (60 ms); clearing the last one fades back. A slot whose file is missing counts as empty. Muting or soloing never brings the dry signal back: muted IRs stay silent.
 - **Zero latency.** The convolution runs in JUCE's zero-latency mode (a 2048-sample low-latency head, larger FFT blocks for the rest of long IRs). The plugin reports 0 samples, so the dry signal needs no compensation delay.
 - **Pan law.** Mono IRs use an equal-power pan that is unity gain in the centre (so +3 dB when panned hard to one side). Stereo IRs use a balance control that only attenuates the opposite side. On a mono output, pan is ignored and a stereo IR is summed to mono (L+R at −6 dB each).
 - **Stereo input with a mono IR** is processed as dual mono (left and right each convolved with the IR), so a stereo guitar bus stays stereo.
@@ -188,7 +215,7 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 - **IR length** is a percentage of the IR's full length (1–100 %), with a 5 ms fade-out when shortened. At 100 % the IR is untouched.
 - **Slot delay** uses 3rd-order Lagrange interpolation, which needs no latency. Whole-sample delays are exact. Between samples there is a slight treble roll-off, worst at exactly half a sample: about −0.5 dB at 10 kHz and −2.5 dB at 15 kHz in a 48 kHz session.
 - **Filters** are state-variable (TPT) filters: high/low-pass are Butterworth (12 or 24 dB/oct); EQ bands are bell or shelf. Parameter changes ramp over 30 ms; a peak/shelf switch passes through 0 dB.
-- **Everything runs in stereo internally**, also for a mono source with mono IRs. This costs some CPU that could be saved later.
+- **Mono tracks use half the CPU per slot:** with a mono input and a mono IR, only one channel is convolved, delayed and filtered, and the result is used for both outputs (the result is bit-identical). Stereo inputs and stereo IRs use two channels. When a slot switches from mono to stereo processing (a stereo IR is loaded on a mono track), the right channel continues seamlessly from the left one; a mono IR that replaces a stereo IR keeps two channels running until the next IR, so the crossfade between them stays clean.
 
 ### Impulse responses
 
@@ -201,11 +228,12 @@ Agreed with the owner after 0.1.0, in steps that are each released and tried in 
 
 ## Known gaps
 
-- **Step-1 features not yet tried in a DAW.** Version 0.1.0 works in Cubase. The new right-click menus, dragging the browser's edge (the plugin resizes its own window while you drag, which hosts handle slightly differently), "Open in Finder/Explorer", and the Notes text field (keyboard focus in the host) need trying in Cubase and Logic.
+- **Steps 1 and 2 not yet tried in a DAW.** Version 0.1.0 works in Cubase. New since then and untested in a host: right-click menus, dragging the browser's edge and adding/hiding slots (the plugin resizes its own window), "Open in Finder/Explorer", the Notes text field (keyboard focus), A/B switching (many parameters change at once, like a preset load) and Auto gain/Match by ear.
+- **Auto gain and Match follow changes with a short delay** in real time (worked out on a background thread every 20 ms, then smoothed). While a new IR is being crossfaded in, the level can be briefly off.
+- **A very wide window with five slots** (about 1750 px at 100 % with the browser). The 75 % scale helps on laptops.
 - **Still to try from 0.1.0:** keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host; they haven't been reported as a problem in Cubase.
 - **Time-alignment has only been tested with synthetic IRs.** The maths is verified, but how well it judges real microphones (the 20 % match threshold in particular) needs trying with real multi-mic IR packs.
 - **Draggable EQ handles on the display** are not implemented yet (planned for step 3).
-- **CPU:** the engine always processes in stereo, also for a mono source with mono IRs (planned for step 2).
 
 ## For developers
 

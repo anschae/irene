@@ -26,10 +26,14 @@ namespace irene::ui
         std::function<void()> onToggleFavourite;
         std::function<void()> onAlign;                        // "Align" clicked
         std::function<void()> onGoBack;                       // back to the previous IR
+        std::function<void()> onHide;                         // the "x" on the last slot
 
         void setSelected (bool shouldBeSelected);
         void setFavourite (bool isFavourite);
         void setStepEnabled (bool canStep);
+
+        /** Shows the "x" that hides this slot (only on the last visible, empty slot). */
+        void setHideButtonVisible (bool shouldBeVisible);
 
         /** Shows or hides the controls that need the IR browser (favourite, prev/next). */
         void setBrowserControlsVisible (bool shouldBeVisible);
@@ -68,6 +72,7 @@ namespace irene::ui
         juce::Label title, name, info, notice, delayReadout;
         juce::TextButton favouriteButton { juce::String::fromUTF8 ("\xe2\x98\x85") }, prevButton { "<" }, nextButton { ">" };
         BackButton backButton;
+        juce::TextButton hideButton { juce::String::fromUTF8 ("\xc3\x97") };
         juce::TextButton loadButton { "Load..." }, clearButton { "Clear" }, swapButton { "Swap" };
         juce::TextButton normaliseButton { "Norm" }, autoTrimButton { "Trim" }, alignButton { "Align" };
         Knob gain { "GAIN" }, pan { "PAN" }, delay { "DELAY" }, length { "LENGTH" };

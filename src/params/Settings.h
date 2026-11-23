@@ -87,6 +87,15 @@ namespace irene
             it is muted, and mute/solo of the other slots are ignored. */
         int auditionSlot = -1;
 
+        /** The "Auto gain" parameter. */
+        bool autoGainOn = false;
+
+        /** Not parameters: gains worked out by IReneProcessor (see LevelWorker).
+            autoGainDb is applied to the wet signal (the sum of the slots),
+            matchGainDb (A/B loudness matching) after the output gain. */
+        float autoGainDb = 0.0f;
+        float matchGainDb = 0.0f;
+
         bool operator== (const EngineSettings&) const = default;
 
         bool anySolo() const noexcept

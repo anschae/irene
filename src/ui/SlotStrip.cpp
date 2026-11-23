@@ -48,6 +48,10 @@ namespace irene::ui
         favouriteButton.setColour (juce::TextButton::buttonOnColourId, colours::solo);
         favouriteButton.onClick = [this] { if (onToggleFavourite) onToggleFavourite(); };
 
+        hideButton.setTooltip ("Hide this slot (it is empty). Its settings go back to their defaults.");
+        hideButton.onClick = [this] { if (onHide) onHide(); };
+        addChildComponent (hideButton);
+
         backButton.setTooltip ("Back to the IR that was in this slot before (undoes the last load or Clear; click again to go further back)");
         backButton.onClick = [this] { if (onGoBack) onGoBack(); };
         addAndMakeVisible (backButton);
@@ -138,6 +142,15 @@ namespace irene::ui
         favouriteButton.setToggleState (isFavourite, juce::dontSendNotification);
     }
 
+    void SlotStrip::setHideButtonVisible (bool shouldBeVisible)
+    {
+        if (hideButton.isVisible() != shouldBeVisible)
+        {
+            hideButton.setVisible (shouldBeVisible);
+            repaint();
+        }
+    }
+
     void SlotStrip::setStepEnabled (bool canStep)
     {
         prevButton.setEnabled (canStep);
@@ -205,7 +218,8 @@ namespace irene::ui
         notice.setColour (juce::Label::textColourId, i.error.isNotEmpty() ? colours::danger : colours::warning);
         notice.setText (i.error.isNotEmpty() ? i.error : i.notice, juce::dontSendNotification);
 
-        loadButton.setButtonText (missing ? "Locate..." : "Load...");
+        const auto compact = getWidth() > 0 && getWidth() < 280;
+        loadButton.setButtonText (missing ? (compact ? "Locate" : "Locate...") : (compact ? "Load" : "Load..."));
         clearButton.setEnabled (hasIR || missing);
         backButton.setEnabled (i.historySize > 0);
         favouriteButton.setEnabled (hasIR);
@@ -233,7 +247,7 @@ namespace irene::ui
         juce::PopupMenu menu;
         menu.setLookAndFeel (&getLookAndFeel());
 
-        for (int other = 0; other < kNumSlots; ++other)
+        for (int other = 0; other < processor.getVisibleSlots(); ++other)
             if (other != slot)
                 menu.addItem (other + 1, "Swap with Slot " + juce::String (other + 1));
 
@@ -317,9 +331,14 @@ namespace irene::ui
 
         if (selected && browserControls)
         {
+            auto label = getLocalBounds().reduced (12, 9).removeFromTop (14);
+
+            if (hideButton.isVisible())
+                label.removeFromRight (26);
+
             g.setColour (colour);
             g.setFont (font (10.0f, true));
-            g.drawText ("BROWSER TARGET", getLocalBounds().reduced (12, 9).removeFromTop (14), juce::Justification::topRight);
+            g.drawText (getWidth() < 280 ? "TARGET" : "BROWSER TARGET", label, juce::Justification::topRight);
         }
     }
 
@@ -347,7 +366,9 @@ namespace irene::ui
         auto area = getLocalBounds().reduced (12, 8);
         area.removeFromLeft (2);
 
-        title.setBounds (area.removeFromTop (16));
+        auto titleRow = area.removeFromTop (16);
+        hideButton.setBounds (titleRow.removeFromRight (20).withSizeKeepingCentre (20, 18).translated (2, -1));
+        title.setBounds (titleRow);
 
         auto nameRow = area.removeFromTop (24);
 
@@ -369,6 +390,9 @@ namespace irene::ui
         info.setBounds (area.removeFromTop (18));
         notice.setBounds (area.removeFromTop (15));
         area.removeFromTop (3);
+
+        // narrow strips (four or five slots) use shorter labels
+        refresh();
 
         auto buttons = area.removeFromTop (24);
         const auto gap = 5;

@@ -441,7 +441,7 @@ namespace irene::ui
 
         const auto target = processor.uiState.targetSlot.load();
 
-        for (int i = 0; i < kNumSlots; ++i)
+        for (int i = 0; i < processor.getVisibleSlots(); ++i)
             menu.addItem (loadIntoSlotItem + i, "Load into Slot " + juce::String (i + 1) + (i == target ? "  (target)" : ""));
 
         menu.addSeparator();

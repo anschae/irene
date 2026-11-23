@@ -85,6 +85,24 @@ namespace irene::ui
         selectTab (0);
     }
 
+    void FilterEditor::setVisibleSlots (int numSlots)
+    {
+        numSlots = juce::jlimit (1, kNumSlots, numSlots);
+
+        if (numSlots == visibleSlots)
+            return;
+
+        visibleSlots = numSlots;
+
+        for (int t = 1; t <= kNumSlots; ++t)
+            tabs[t]->setVisible (t <= visibleSlots);
+
+        if (selectedTab > visibleSlots && selectedTab <= kNumSlots)
+            selectTab (0);
+
+        resized();
+    }
+
     void FilterEditor::selectTab (int tab)
     {
         tab = juce::jlimit (0, kNumTabs - 1, tab);
@@ -160,10 +178,14 @@ namespace irene::ui
         bypass.setBounds (tabRow.removeFromRight (80));
         tabRow.removeFromRight (12);
 
-        const auto tabWidth = juce::jmin (96, (tabRow.getWidth() - (kNumTabs - 1) * 4) / kNumTabs);
+        const auto shownTabs = visibleSlots + 2;
+        const auto tabWidth = juce::jmin (96, (tabRow.getWidth() - (shownTabs - 1) * 4) / shownTabs);
 
         for (auto* tab : tabs)
         {
+            if (! tab->isVisible())
+                continue;
+
             tab->setBounds (tabRow.removeFromLeft (tabWidth));
             tabRow.removeFromLeft (4);
         }
