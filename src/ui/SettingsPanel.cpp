@@ -12,7 +12,8 @@ namespace irene::ui
         }
     }
 
-    SettingsPanel::SettingsPanel()
+    SettingsPanel::SettingsPanel (ConfirmOverlay& c)
+        : confirm (c)
     {
         title.setText ("Settings", juce::dontSendNotification);
         title.setFont (font (20.0f, true));
@@ -25,7 +26,7 @@ namespace irene::ui
         styleHeading (loadingHeading, "IR LOADING");
         styleHeading (scaleHeading, "UI SCALE");
         styleHeading (presetsHeading, "PRESETS FOLDER");
-        styleHeading (foldersHeading, "FAVOURITE FOLDERS (shown at the top of the IR browser)");
+        styleHeading (foldersHeading, "FAVOURITE FOLDERS (shown at the top of the IR browser; double-click to rename)");
 
         for (auto* l : { &loadingHeading, &scaleHeading, &presetsHeading, &foldersHeading, &presetsPath })
             addAndMakeVisible (l);
@@ -72,6 +73,8 @@ namespace irene::ui
         addAndMakeVisible (folderList);
 
         addButton.setTooltip ("Add a folder that contains impulse responses");
+        renameButton.setTooltip ("Change the name the IR browser shows for the selected folder (the folder itself is not renamed)");
+        renameButton.onClick = [this] { renameFolder(); };
         removeButton.setTooltip ("Remove the selected folder from the list (no files are deleted)");
         upButton.setTooltip ("Move the selected folder up in the list");
         downButton.setTooltip ("Move the selected folder down in the list");
@@ -80,7 +83,7 @@ namespace irene::ui
         upButton.onClick = [this] { moveFolder (-1); };
         downButton.onClick = [this] { moveFolder (1); };
 
-        for (auto* b : { &addButton, &removeButton, &upButton, &downButton })
+        for (auto* b : { &addButton, &renameButton, &removeButton, &upButton, &downButton })
             addAndMakeVisible (b);
 
         setWantsKeyboardFocus (true);
@@ -115,6 +118,7 @@ namespace irene::ui
                              juce::dontSendNotification);
         defaultPresets.setEnabled (d.presetsFolder.isNotEmpty());
 
+        current = d;
         folders = d.favouriteFolders;
         folderList.updateContent();
         folderList.repaint();
@@ -126,6 +130,7 @@ namespace irene::ui
         const auto row = folderList.getSelectedRow();
         const auto valid = row >= 0 && row < folders.size();
         removeButton.setEnabled (valid);
+        renameButton.setEnabled (valid);
         upButton.setEnabled (valid && row > 0);
         downButton.setEnabled (valid && row < folders.size() - 1);
     }
@@ -154,6 +159,46 @@ namespace irene::ui
 
         if (row >= 0 && row < folders.size())
             settings->update ([row] (auto& d) { d.favouriteFolders.remove (row); });
+    }
+
+    void SettingsPanel::renameFolder()
+    {
+        const auto row = folderList.getSelectedRow();
+
+        if (row < 0 || row >= folders.size())
+            return;
+
+        const auto path = folders[row];
+        const auto ownName = juce::File::isAbsolutePath (path) ? juce::File (path).getFileName() : path;
+        juce::Component::SafePointer<SettingsPanel> safe (this);
+
+        confirm.prompt ("Rename favourite folder",
+                        "The name shown in IRene for\n" + path + "\nThe folder itself is not renamed. Leave the field empty to show the folder's own name.",
+                        current.folderDisplayName (path), {}, false, "Rename",
+                        [safe, path, ownName] (bool confirmed, const juce::String& text, bool)
+                        {
+                            if (safe == nullptr || ! confirmed)
+                                return;
+
+                            const auto name = text.trim();
+
+                            safe->settings->update ([&] (auto& d)
+                            {
+                                if (name.isEmpty() || name == ownName)
+                                    d.folderNames.erase (path);
+                                else
+                                    d.folderNames[path] = name;
+                            });
+                        });
+    }
+
+    void SettingsPanel::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+    {
+        if (row >= 0 && row < folders.size())
+        {
+            folderList.selectRow (row);
+            renameFolder();
+        }
     }
 
     void SettingsPanel::moveFolder (int delta)
@@ -198,10 +243,21 @@ namespace irene::ui
         if (selected)
             g.fillAll (colours::accent.withAlpha (0.3f));
 
-        const auto exists = juce::File::isAbsolutePath (folders[row]) && juce::File (folders[row]).isDirectory();
+        const auto& path = folders[row];
+        const auto exists = juce::File::isAbsolutePath (path) && juce::File (path).isDirectory();
+        auto area = juce::Rectangle<int> (8, 0, width - 16, height);
+
+        // the name shown in the browser, then the full path
+        const auto name = current.folderDisplayName (path);
+        g.setFont (font (13.0f, true));
         g.setColour (exists ? colours::text : colours::warning);
-        g.setFont (font (13.0f));
-        g.drawText (folders[row] + (exists ? "" : "   (not found)"), 8, 0, width - 16, height, juce::Justification::centredLeft);
+        const auto nameWidth = juce::jmin (area.getWidth() / 2, juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 4);
+        g.drawText (name, area.removeFromLeft (nameWidth), juce::Justification::centredLeft, true);
+        area.removeFromLeft (10);
+
+        g.setFont (font (12.0f));
+        g.setColour (exists ? colours::textDim : colours::warning);
+        g.drawText (path + (exists ? "" : "   (not found)"), area, juce::Justification::centredLeft, true);
     }
 
     bool SettingsPanel::keyPressed (const juce::KeyPress& key)
@@ -262,7 +318,7 @@ namespace irene::ui
         area.removeFromBottom (6);
         folderList.setBounds (area);
 
-        for (auto* b : { &addButton, &removeButton, &upButton, &downButton })
+        for (auto* b : { &addButton, &renameButton, &removeButton, &upButton, &downButton })
         {
             b->setBounds (buttons.removeFromLeft (100));
             buttons.removeFromLeft (6);

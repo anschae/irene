@@ -25,6 +25,7 @@ namespace irene::ui
         std::function<void (int direction)> onStep;           // prev/next IR (-1 / +1)
         std::function<void()> onToggleFavourite;
         std::function<void()> onAlign;                        // "Align" clicked
+        std::function<void()> onGoBack;                       // back to the previous IR
 
         void setSelected (bool shouldBeSelected);
         void setFavourite (bool isFavourite);
@@ -35,6 +36,7 @@ namespace irene::ui
         void refresh();
 
         void paint (juce::Graphics&) override;
+        void paintOverChildren (juce::Graphics&) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
 
@@ -65,6 +67,7 @@ namespace irene::ui
 
         juce::Label title, name, info, notice, delayReadout;
         juce::TextButton favouriteButton { juce::String::fromUTF8 ("\xe2\x98\x85") }, prevButton { "<" }, nextButton { ">" };
+        BackButton backButton;
         juce::TextButton loadButton { "Load..." }, clearButton { "Clear" }, swapButton { "Swap" };
         juce::TextButton normaliseButton { "Norm" }, autoTrimButton { "Trim" }, alignButton { "Align" };
         Knob gain { "GAIN" }, pan { "PAN" }, delay { "DELAY" }, length { "LENGTH" };

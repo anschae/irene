@@ -6,7 +6,8 @@ namespace irene
 
     //==============================================================================
     IReneEditor::Content::Content (IReneEditor& e, IReneProcessor& p)
-        : editor (e), presetBar (p, confirm), browser (p), display (p), filterEditor (p), globalSection (p), exportPanel (p)
+        : editor (e), presetBar (p, confirm), browser (p, confirm), browserResizer (e), display (p), filterEditor (p), globalSection (p),
+          settingsPanel (confirm), exportPanel (p), notesPanel (p)
     {
         setComponentID (kContentComponentId);
 
@@ -32,6 +33,7 @@ namespace irene
         browserButton.setTooltip ("Show or hide the IR browser");
         addAndMakeVisible (browserButton);
         addAndMakeVisible (browser);
+        addAndMakeVisible (browserResizer);
 
         browser.onOpenSettings = [this] { settingsButton.triggerClick(); };
 
@@ -56,6 +58,18 @@ namespace irene
         addChildComponent (exportPanel);
         exportPanel.onClose = [this] { exportPanel.setVisible (false); };
 
+        notesButton.setTooltip ("Notes about this sound, saved with the project");
+        notesButton.setColour (juce::TextButton::buttonOnColourId, colours::accent.withAlpha (0.45f));
+        notesButton.onClick = [this]
+        {
+            notesPanel.setVisible (true);
+            notesPanel.toFront (true);
+        };
+        addAndMakeVisible (notesButton);
+
+        addChildComponent (notesPanel);
+        notesPanel.onClose = [this] { notesPanel.setVisible (false); };
+
         addChildComponent (confirm);
     }
 
@@ -76,17 +90,20 @@ namespace irene
         browserButton.setBounds (header.removeFromRight (90).reduced (0, 2));
         header.removeFromRight (6);
         exportButton.setBounds (header.removeFromRight (96).reduced (0, 2));
+        header.removeFromRight (6);
+        notesButton.setBounds (header.removeFromRight (70).reduced (0, 2));
         header.removeFromLeft (20);
         header.removeFromRight (20);
         presetBar.setBounds (header.removeFromLeft (juce::jmin (header.getWidth(), 520)).reduced (0, 2));
         area.removeFromTop (8);
 
         browser.setVisible (editor.isBrowserOpen());
+        browserResizer.setVisible (editor.isBrowserOpen());
 
         if (editor.isBrowserOpen())
         {
-            browser.setBounds (area.removeFromLeft (kBrowserWidth));
-            area.removeFromLeft (kGap);
+            browser.setBounds (area.removeFromLeft (editor.getBrowserWidth()));
+            browserResizer.setBounds (area.removeFromLeft (kGap).withTrimmedTop (20).withTrimmedBottom (20));
         }
 
         globalSection.setBounds (area.removeFromRight (kGlobalWidth));
@@ -109,7 +126,39 @@ namespace irene
 
         settingsPanel.setBounds (getLocalBounds());
         exportPanel.setBounds (getLocalBounds());
+        notesPanel.setBounds (getLocalBounds());
         confirm.setBounds (getLocalBounds());
+    }
+
+    void IReneEditor::BrowserResizer::paint (juce::Graphics& g)
+    {
+        if (! isMouseOverOrDragging())
+            return;
+
+        // a grip: three dots, shown while the mouse is over the strip
+        g.setColour (colours::accent.withAlpha (isMouseButtonDown() ? 0.9f : 0.6f));
+        const auto x = static_cast<float> (getWidth()) * 0.5f;
+        const auto y = static_cast<float> (getHeight()) * 0.5f;
+
+        for (int i = -1; i <= 1; ++i)
+            g.fillEllipse (x - 1.5f, y + static_cast<float> (i) * 7.0f - 1.5f, 3.0f, 3.0f);
+
+        g.setColour (colours::accent.withAlpha (0.25f));
+        g.fillRect (getLocalBounds().withSizeKeepingCentre (2, getHeight()));
+    }
+
+    void IReneEditor::setBrowserWidth (int width, bool remember)
+    {
+        width = juce::jlimit (GlobalSettings::kMinBrowserWidth, GlobalSettings::kMaxBrowserWidth, width);
+
+        if (width != browserWidth)
+        {
+            browserWidth = width;
+            applyScale (currentScale);
+        }
+
+        if (remember)
+            plugin.getGlobalSettings().update ([width] (auto& d) { d.browserWidth = width; });
     }
 
     //==============================================================================
@@ -129,7 +178,17 @@ namespace irene
             strip->onStep = [this, i] (int direction) { stepSlot (i, direction); };
             strip->onToggleFavourite = [this, i] { toggleSlotFavourite (i); };
             strip->onAlign = [this, i] { alignToSlot (i); };
+            strip->onGoBack = [this, i] { goBack (i); };
         }
+
+        content.browser.onLoadIntoSlot = [this] (int slot, const juce::File& file, const juce::StringArray& list)
+        {
+            plugin.setSlotListContext (slot, list);
+            requestLoad (slot, file);
+        };
+
+        content.browser.onAuditionSoloChanged = [this] { auditionSoloChanged(); };
+        content.notesPanel.onNotesChanged = [this] (bool) { updateNotesButton(); };
 
         content.browser.onFileChosen = [this] (const juce::File& file, const juce::StringArray& list)
         {
@@ -166,15 +225,22 @@ namespace irene
         plugin.getSlots().addListener (this);
 
         browserOpen = plugin.getGlobalSettings().get().browserOpen;
+        browserWidth = plugin.getGlobalSettings().get().browserWidth;
         content.browserButton.setToggleState (browserOpen, juce::dontSendNotification);
         applyScale (plugin.getGlobalSettings().get().uiScale);
         refreshStrips();
+        updateNotesButton();
         constructed = true;
     }
 
     IReneEditor::~IReneEditor()
     {
         stopTimer();
+
+        // "Solo target" belongs to the open window: never leave the plugin
+        // playing a single slot with nothing on screen to say so.
+        plugin.auditionSolo = false;
+
         plugin.getSlots().removeListener (this);
         plugin.getLibrary().removeListener (this);
         plugin.getGlobalSettings().removeListener (this);
@@ -244,12 +310,40 @@ namespace irene
         browserOpen = d.browserOpen;
         content.browserButton.setToggleState (browserOpen, juce::dontSendNotification);
 
+        if (! browserOpen && plugin.auditionSolo.load())
+        {
+            plugin.auditionSolo = false;
+            content.browser.syncAuditionSolo();
+            auditionSoloChanged();
+        }
+
         if (browserChanged || (std::abs (d.uiScale - currentScale) > 0.001f && ! isTimerRunning()))
             applyScale (browserChanged ? currentScale : d.uiScale);
     }
 
+    void IReneEditor::auditionSoloChanged()
+    {
+        for (auto* strip : content.strips)
+            strip->repaint();
+    }
+
+    void IReneEditor::updateNotesButton()
+    {
+        content.notesButton.setToggleState (plugin.getNotes().isNotEmpty(), juce::dontSendNotification);
+        content.notesButton.setButtonText (plugin.getNotes().isNotEmpty() ? juce::String::fromUTF8 ("Notes \xe2\x80\xa2") : juce::String ("Notes"));
+    }
+
+    void IReneEditor::goBack (int slot)
+    {
+        const auto restored = plugin.getSlots().goBack (slot);
+
+        if (slot == plugin.uiState.targetSlot.load() && restored.path.isNotEmpty())
+            content.browser.showAsCurrent (restored.path);
+    }
+
     void IReneEditor::refreshStrips()
     {
+        updateNotesButton(); // the project may have been reloaded
         for (int i = 0; i < kNumSlots; ++i)
         {
             const auto info = plugin.getSlots().getInfo (i);

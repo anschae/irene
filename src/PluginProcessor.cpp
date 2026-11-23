@@ -18,6 +18,7 @@ namespace irene
         const juce::Identifier kShowSlotCurves { "showSlotCurves" };
         const juce::Identifier kResponseChannel { "responseChannel" };
         const juce::Identifier kResponseSmoothing { "responseSmoothing" };
+        const juce::Identifier kNotes { "notes" };
 
         ParamRefs makeParamRefs (juce::AudioProcessorValueTreeState& apvts)
         {
@@ -101,7 +102,29 @@ namespace irene
             return;
         }
 
-        engine.process (buffer, paramRefs.read(), isNonRealtime());
+        engine.process (buffer, readSettings(), isNonRealtime());
+    }
+
+    EngineSettings IReneProcessor::readSettings() const noexcept
+    {
+        auto settings = paramRefs.read();
+
+        if (auditionSolo.load (std::memory_order_relaxed))
+            settings.auditionSlot = juce::jlimit (0, kNumSlots - 1, uiState.targetSlot.load (std::memory_order_relaxed));
+
+        return settings;
+    }
+
+    juce::String IReneProcessor::getNotes() const
+    {
+        const juce::ScopedLock sl (notesLock);
+        return notes;
+    }
+
+    void IReneProcessor::setNotes (const juce::String& newNotes)
+    {
+        const juce::ScopedLock sl (notesLock);
+        notes = newNotes;
     }
 
     void IReneProcessor::processBlock (juce::AudioBuffer<double>&, juce::MidiBuffer&)
@@ -302,6 +325,7 @@ namespace irene
         for (int i = 0; i < kNumSlots; ++i)
         {
             slotManager.clear (i);
+            slotManager.clearHistory (i);
             slotListContexts[static_cast<size_t> (i)].clear();
         }
     }
@@ -317,6 +341,10 @@ namespace irene
         ui.setProperty (kShowSlotCurves, uiState.showSlotCurves.load(), nullptr);
         ui.setProperty (kResponseChannel, uiState.responseChannel.load(), nullptr);
         ui.setProperty (kResponseSmoothing, uiState.responseSmoothing.load(), nullptr);
+
+        if (const auto text = getNotes(); text.isNotEmpty())
+            ui.setProperty (kNotes, text, nullptr);
+
         state.appendChild (ui, nullptr);
         return state;
     }
@@ -336,6 +364,9 @@ namespace irene
             uiState.responseChannel = juce::jlimit (0, 2, static_cast<int> (ui.getProperty (kResponseChannel, 0)));
             uiState.responseSmoothing = juce::jlimit (0, 2, static_cast<int> (ui.getProperty (kResponseSmoothing, 0)));
         }
+
+        // Older projects have no notes: they start empty.
+        setNotes (state.getChildWithName (kUiType).getProperty (kNotes).toString());
 
         // Only a label: the project state itself is what counts.
         const auto presetName = state.getProperty (kPresetName).toString();

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.22)
 # DAWs. Changing them after release makes existing projects lose the plugin.
 # ==============================================================================
 set(IRENE_PLUGIN_NAME        "IRene")
-set(IRENE_VERSION            "0.1.0")
+set(IRENE_VERSION            "0.2.0")
 set(IRENE_COMPANY_NAME       "anschae")
 set(IRENE_MANUFACTURER_CODE  "Ansc")   # 4 chars, at least one uppercase (AU)
 set(IRENE_PLUGIN_CODE        "IRne")   # 4 chars, at least one uppercase (AU)
@@ -94,6 +94,8 @@ target_sources(IReneShared INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/GlobalSection.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsPanel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/NotesPanel.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/NotesPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Settings.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Parameters.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/params/Parameters.cpp
@@ -189,7 +191,8 @@ if(IRENE_BUILD_TESTS)
         tests/PresetTests.cpp
         tests/ResponseTests.cpp
         tests/ExportTests.cpp
-        tests/TimeAlignTests.cpp)
+        tests/TimeAlignTests.cpp
+        tests/WorkflowTests.cpp)
 
     target_link_libraries(IReneTests PRIVATE IReneShared)
     # The tests pump the message loop by hand, which needs this switch.

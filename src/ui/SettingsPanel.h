@@ -12,7 +12,7 @@ namespace irene::ui
                                 private Broadcaster::Listener
     {
     public:
-        SettingsPanel();
+        explicit SettingsPanel (ConfirmOverlay&);
         ~SettingsPanel() override;
 
         std::function<void()> onClose;
@@ -26,17 +26,21 @@ namespace irene::ui
         int getNumRows() override;
         void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
         void selectedRowsChanged (int) override { updateButtons(); }
+        void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
         void broadcasterChanged (Broadcaster*) override { refresh(); }
 
         void refresh();
         void updateButtons();
         void addFolder();
         void removeFolder();
+        void renameFolder();
         void moveFolder (int delta);
         void choosePresetsFolder();
 
+        ConfirmOverlay& confirm;
         GlobalSettings::Shared settings;
         juce::StringArray folders;
+        GlobalSettings::Data current;
         juce::Rectangle<int> box;
 
         juce::Label title, loadingHeading, scaleHeading, presetsHeading, foldersHeading, presetsPath, hint;
@@ -47,7 +51,7 @@ namespace irene::ui
         juce::ComboBox scale;
         juce::TextButton choosePresets { "Choose..." }, defaultPresets { "Use default" };
         juce::ListBox folderList;
-        juce::TextButton addButton { "Add..." }, removeButton { "Remove" }, upButton { "Move up" }, downButton { "Move down" };
+        juce::TextButton addButton { "Add..." }, renameButton { "Rename..." }, removeButton { "Remove" }, upButton { "Move up" }, downButton { "Move down" };
         std::unique_ptr<juce::FileChooser> chooser;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsPanel)

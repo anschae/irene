@@ -86,7 +86,16 @@ int main (int argc, char* argv[])
 
     {
         irene::GlobalSettings::Shared settings;
-        settings->update ([&] (auto& d) { d.favouriteFolders = folders; d.browserOpen = true; d.uiScale = 1.0f; });
+        settings->update ([&] (auto& d)
+        {
+            d.favouriteFolders = folders;
+            d.browserOpen = true;
+            d.uiScale = 1.0f;
+
+            // show a custom display name for the first favourite folder
+            if (! folders.isEmpty())
+                d.folderNames[folders[0]] = "Mesa 4x12 (renamed)";
+        });
     }
 
     irene::IReneProcessor processor;
@@ -96,6 +105,15 @@ int main (int argc, char* argv[])
 
     for (int i = 0; i < files.size() && i < irene::kNumSlots; ++i)
         processor.getSlots().loadFile (i, files[i]);
+
+    // a second IR in slot 1, so that its "back" button has something to go back to
+    if (files.size() > 1)
+    {
+        processor.getSlots().waitForPendingLoads();
+        processor.getSlots().loadFile (0, files[1]);
+        processor.getSlots().waitForPendingLoads();
+        processor.getSlots().loadFile (0, files[0]);
+    }
 
     processor.getSlots().waitForPendingLoads();
     pumpMessages (100);
@@ -183,6 +201,39 @@ int main (int argc, char* argv[])
             close->triggerClick();
             pumpMessages (100);
         }
+    }
+
+    if (auto* solo = findButton (*editor, "Solo target"))
+    {
+        solo->triggerClick();
+        pumpMessages (150);
+        ok = save (*editor, out.getChildFile ("solo-target.png")) && ok;
+        solo->triggerClick();
+        pumpMessages (100);
+    }
+
+    if (auto* notesButton = findButton (*editor, "Notes"))
+    {
+        processor.setNotes ("Rhythm guitars, double-tracked L/R.\nSM57 cap edge + R121 blend, Align on slot 1.");
+        notesButton->triggerClick();
+        pumpMessages (150);
+        ok = save (*editor, out.getChildFile ("notes.png")) && ok;
+
+        if (auto* close = findButton (*editor, "Close"))
+        {
+            close->triggerClick();
+            pumpMessages (100);
+        }
+    }
+
+    // A wider browser (dragging its edge)
+    if (auto* irene = dynamic_cast<irene::IReneEditor*> (editor.get()))
+    {
+        irene->setBrowserWidth (440, false);
+        pumpMessages (150);
+        ok = save (*editor, out.getChildFile ("browser-wide.png")) && ok;
+        irene->setBrowserWidth (irene::GlobalSettings::kDefaultBrowserWidth, false);
+        pumpMessages (100);
     }
 
     // A second size, to check the scaling

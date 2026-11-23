@@ -46,8 +46,8 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 | `src/app/` | `GlobalSettings`, `PresetManager`, `Broadcaster` |
 | `src/analysis/` | `Response`: frequency response maths and the spectrum worker. `TimeAlign`: cross-correlation alignment of slots (pure functions; `IReneProcessor::alignSlots` applies the result) |
 | `src/export/` | "Export as single IR" |
-| `src/ui/`, `src/PluginEditor.*` | Editor. Everything sits in a fixed-size `Content` component that is scaled as a whole |
-| `tests/` | JUCE `UnitTest`s, one file per area. `TestHelpers.h` has IR generators, reference convolution, WAV writing |
+| `src/ui/`, `src/PluginEditor.*` | Editor. Everything sits in a fixed-size `Content` component that is scaled as a whole. Its width depends on `kNumSlots` and on the browser width (a global setting, dragged with `IReneEditor::BrowserResizer`) |
+| `tests/` | JUCE `UnitTest`s, one file per area. `TestHelpers.h` has IR generators, reference convolution, WAV writing. `WorkflowTests.cpp` covers the step-1 features (folder names, browser layout, history, Solo target, notes) |
 | `tools/Snapshot.cpp` | Editor-to-PNG renderer |
 
 ## Things that were learned the hard way
@@ -63,6 +63,10 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 - **Piping the snapshot tool into `head`** kills it mid-write and leaves truncated PNGs.
 - **An IR sampled at twice the rate is twice as loud as a filter.** Resampling preserves the filter response, so a test that builds "the same IR" at 96 kHz and 48 kHz must halve the 96 kHz sample values.
 - **Reference signals in tests must be long enough.** A comparison once looked 35 dB worse than it was because the reference IR was cut off before a 110 Hz resonance had decayed.
+- **Things that are deliberately not parameters:** the browser's "Solo target" (`IReneProcessor::auditionSolo`, applied in `readSettings()`; the engine and display use `readSettings()`, export uses the bare `ParamRefs::read()`), the per-slot IR history (`SlotManager::goBack`), and the notes (project state only, not presets). "Solo target" must be switched off whenever the editor closes or the browser is hidden.
+- **The browser's rows are refreshed asynchronously** (after the library's change message). Code that acts on the current state, such as toggling a favourite, must ask the library, not the cached `Row`.
+- **`juce::TextEditor::setText (..., true)` reports the change asynchronously.** Tests must pump the message loop before checking the result.
+- **Browser column layout:** only changes made by the user are stored (`tableColumnsResized` while the header has the mouse, or `tableColumnsChanged`); the stretch-to-fit resizing that follows from the browser's width must not overwrite the stored layout. Width and columns are read only when an editor opens, so one instance never resizes another.
 - **Analytic test IRs** (`makeMicIR` in `tests/TimeAlignTests.cpp`) are defined in continuous time and can be sampled with any fractional delay or sample rate without interpolation error. Prefer them over noise when timing matters.
 
 ## CI and releases
@@ -74,21 +78,19 @@ xvfb-run -a build/IReneSnapshot_artefacts/Release/IReneSnapshot out/ some/ir/fol
 
 ## Status and backlog
 
-Version 0.1.0 is feature complete and green in CI. Automatic time-alignment (the Align button on each slot) was added after it. Nothing has been used by a person in a DAW yet; expect bug reports about keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and file dialogs.
+Version 0.2.0 = 0.1.0 + automatic time-alignment + step 1 (below). The owner has used 0.1.0 in Cubase and it works; the step-1 features have not been tried in a DAW yet. Expect reports about right-click menus, dragging the browser edge (the plugin resizes its own window) and keyboard focus.
 
 **Time-alignment, open points** (see "Automatic time-alignment" in the README for how it behaves):
 
 - Only tested with synthetic IRs. The owner needs to try it on real multi-mic packs. The two judgement values are in `src/analysis/TimeAlign.h/.cpp`: `kMinMatch` (0.2, below which a slot is left alone) and `kInversionMargin` (1.1, how much better a flipped fit must be).
-- It compares the IRs before the slot filter blocks. If the owner wants "align as heard", run each IR through its `FilterBlock` first.
+- It compares the IRs before the slot filter blocks. "Align as heard" (step 3) would run each IR through its `FilterBlock` first.
 - There is no undo of its own; it relies on the host seeing the parameter changes.
 
-Ideas discussed with the owner, in the order suggested to him:
+**The plan agreed with the owner** (Nov 2026). Work in steps; each step is pushed, green in CI, released by the owner and tried in Cubase before the next one starts, because steps 2 and 3 add parameters that become permanent once released.
 
-1. ~~Automatic time-alignment of slots~~ (done)
-2. A/B comparison of two complete snapshots, optionally loudness-matched
-3. Undo for auditioning ("back to the previous IR" per slot)
-4. Draggable EQ band handles on the frequency display (the spec's stretch goal)
-5. Tags and ratings in the browser (the library file format already preserves unknown attributes)
-6. Mono CPU optimisation (the engine always processes in stereo)
+1. ~~**Browser and workflow**~~ (done, 0.2.0): folder display names (right-click and Settings), right-click menus (rename, open/show in Finder/Explorer, load into any slot, favourite), resizable browser width and column widths, column visibility remembered globally, per-slot "back to previous IR", "Solo target" while browsing, notepad, mono export default.
+2. **Levels and slots:** dry signal passes through when no IR is loaded (only when no slot has an IR; muting all slots stays silent); auto gain for the slot blend (keep loudness the same with 1..n slots, solo, mute; on for new instances, off for existing projects so they sound unchanged; the same machinery gives A/B loudness matching); `kNumSlots = 5` with a layout that still fits a normal screen at 100 % (show the owner snapshots first); A/B comparison of two complete setups; mono CPU optimisation.
+3. **EQ and display:** more EQ bands with a type per band; draggable EQ points on the display using FabFilter Pro-Q 4's mouse and key conventions (check its manual); a band switches on as soon as its gain is changed; waveform view of the slots; "align as heard" option. **Open question for the owner:** how many bands and in which filter blocks (6 everywhere is ~250 EQ parameters with 5 slots; suggested 6 on input/output and 4 per slot).
+4. **Extras:** tags and ratings in the browser (the library file already preserves unknown attributes); minimum-phase option per slot.
 
-Explicitly out of scope unless the owner asks: CLAP, true-stereo IRs, notarised macOS builds.
+The owner declined linking IRene with his separate IR-capture tool (irene-capture). Explicitly out of scope unless he asks: CLAP, true-stereo IRs, notarised macOS builds.

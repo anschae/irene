@@ -160,7 +160,7 @@ namespace
                 auto* irene = dynamic_cast<IReneEditor*> (editor.get());
                 expect (irene != nullptr && irene->isBrowserOpen());
                 const auto baseWidth = irene != nullptr ? irene->getBaseWidth() : 0;
-                expectEquals (baseWidth, IReneEditor::kBaseWidth + IReneEditor::kBrowserWidth + IReneEditor::kGap);
+                expectEquals (baseWidth, IReneEditor::kBaseWidth + GlobalSettings::kDefaultBrowserWidth + IReneEditor::kGap);
                 expectEquals (editor->getWidth(), baseWidth);
                 expectEquals (editor->getHeight(), IReneEditor::kBaseHeight);
 

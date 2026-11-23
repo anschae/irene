@@ -5,6 +5,8 @@
 
 #include "Broadcaster.h"
 
+#include <map>
+
 namespace irene
 {
     /** User settings that are the same in every DAW and every plugin instance.
@@ -31,6 +33,10 @@ namespace irene
         static constexpr float kMinUiScale = 0.75f;
         static constexpr float kMaxUiScale = 2.0f;
 
+        static constexpr int kDefaultBrowserWidth = 300;
+        static constexpr int kMinBrowserWidth = 250;
+        static constexpr int kMaxBrowserWidth = 700;
+
         struct Data
         {
             float uiScale = 1.0f;
@@ -40,6 +46,18 @@ namespace irene
             bool browserOpen = true;
             juce::String presetsFolder;        // empty = default location
             juce::StringArray favouriteFolders; // in display order
+
+            /** Names shown for favourite folders instead of the folder's own
+                name (path -> display name). Only affects IRene's display. */
+            std::map<juce::String, juce::String> folderNames;
+
+            /** IR browser layout, at 100 % UI scale. */
+            int browserWidth = kDefaultBrowserWidth;
+            juce::String browserColumns; // juce::TableHeaderComponent::toString(); empty = default
+
+            /** The display name of a favourite folder: its custom name if one
+                was given, else the folder's own name. */
+            juce::String folderDisplayName (const juce::String& path) const;
 
             bool operator== (const Data&) const = default;
         };

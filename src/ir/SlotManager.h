@@ -28,6 +28,7 @@ namespace irene
         bool autoTrim = false;
         juce::String notice;       // e.g. "4 channels: using the first two"
         juce::String error;        // last load error, if any
+        int historySize = 0;       // how many earlier IRs "back" can return to
 
         bool isResampled() const noexcept { return status == Status::ready && engineRate > 0.0 && std::abs (sourceRate - engineRate) > 0.5; }
     };
@@ -73,7 +74,21 @@ namespace irene
         /** Marks the slot as referring to an IR that could not be found. */
         void setMissing (int slot, const IRReference& reference);
 
+        /** Empties the slot. The IR that was in it can be brought back with goBack(). */
         void clear (int slot);
+
+        //==============================================================================
+        /** Audition history: every IR replaced by loadFile() or clear() is
+            remembered (up to kMaxHistory per slot), so that goBack() can return
+            to it. Restoring a project or preset starts a fresh history.
+
+            goBack() puts the previous IR back in the background and returns the
+            reference it restores (empty if the slot becomes empty, or if there
+            was nothing to go back to). */
+        static constexpr int kMaxHistory = 25;
+        IRReference goBack (int slot);
+        bool canGoBack (int slot) const;
+        void clearHistory (int slot);
 
         /** Exchanges the IRs (and their per-slot options) of two slots. */
         void swap (int slotA, int slotB);
@@ -151,6 +166,13 @@ namespace irene
         void resetSlot (int slot, SlotInfo::Status status, const IRReference& reference);
         bool ensureResampled (Slot&, const IRSource::Ptr& source, double rate, bool autoTrim);
         float currentLengthParam (int slot) const noexcept;
+        void pushHistory (int slot, const juce::File& incoming); // stateLock must not be held
+
+        struct HistoryEntry
+        {
+            IRSource::Ptr source; // null = the slot was empty
+            bool normalise = true, autoTrim = false;
+        };
 
         Engine& engine;
         const ParamRefs& params;
@@ -158,6 +180,7 @@ namespace irene
         mutable juce::CriticalSection stateLock; // guards `slots` and the defaults; held briefly
         juce::CriticalSection buildLock;         // serialises rebuilds; may be held for a while
         std::array<Slot, kNumSlots> slots;
+        std::array<std::vector<HistoryEntry>, kNumSlots> history; // guarded by stateLock; newest last
         double engineRate = 0.0;
         bool defaultNormalise = true, defaultAutoTrim = false;
 
@@ -166,6 +189,10 @@ namespace irene
             int slot = 0;
             juce::File file;
             juce::uint32 requestId = 0;
+
+            // Going back in the history: install this instead of loading `file`.
+            bool restore = false;
+            HistoryEntry entry;
         };
 
         juce::CriticalSection jobLock;

@@ -48,6 +48,10 @@ namespace irene::ui
         favouriteButton.setColour (juce::TextButton::buttonOnColourId, colours::solo);
         favouriteButton.onClick = [this] { if (onToggleFavourite) onToggleFavourite(); };
 
+        backButton.setTooltip ("Back to the IR that was in this slot before (undoes the last load or Clear; click again to go further back)");
+        backButton.onClick = [this] { if (onGoBack) onGoBack(); };
+        addAndMakeVisible (backButton);
+
         prevButton.setTooltip ("Load the previous IR from the list this IR came from");
         nextButton.setTooltip ("Load the next IR from the list this IR came from");
         prevButton.onClick = [this] { if (onStep) onStep (-1); };
@@ -203,6 +207,7 @@ namespace irene::ui
 
         loadButton.setButtonText (missing ? "Locate..." : "Load...");
         clearButton.setEnabled (hasIR || missing);
+        backButton.setEnabled (i.historySize > 0);
         favouriteButton.setEnabled (hasIR);
         normaliseButton.setEnabled (hasIR);
         autoTrimButton.setEnabled (hasIR);
@@ -318,6 +323,25 @@ namespace irene::ui
         }
     }
 
+    void SlotStrip::paintOverChildren (juce::Graphics& g)
+    {
+        // While the browser's "Solo target" mode is on, the other slots are not heard.
+        if (! processor.auditionSolo.load() || processor.uiState.targetSlot.load() == slot)
+            return;
+
+        const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+        g.setColour (colours::background.withAlpha (0.6f));
+        g.fillRoundedRectangle (bounds, 6.0f);
+
+        auto label = getLocalBounds().withSizeKeepingCentre (juce::jmin (getWidth() - 30, 230), 26).toFloat();
+        g.setColour (colours::panelRaised);
+        g.fillRoundedRectangle (label, 4.0f);
+        g.setColour (colours::solo);
+        g.drawRoundedRectangle (label, 4.0f, 1.0f);
+        g.setFont (font (12.0f, true));
+        g.drawText ("Not heard: browser Solo target is on", label, juce::Justification::centred);
+    }
+
     void SlotStrip::resized()
     {
         auto area = getLocalBounds().reduced (12, 8);
@@ -334,8 +358,11 @@ namespace irene::ui
             nextButton.setBounds (nameRow.removeFromRight (24).reduced (0, 1));
             nameRow.removeFromRight (3);
             prevButton.setBounds (nameRow.removeFromRight (24).reduced (0, 1));
-            nameRow.removeFromRight (6);
+            nameRow.removeFromRight (3);
         }
+
+        backButton.setBounds (nameRow.removeFromRight (24).reduced (0, 1));
+        nameRow.removeFromRight (6);
 
         name.setBounds (nameRow);
 

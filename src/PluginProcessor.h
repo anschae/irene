@@ -53,6 +53,14 @@ namespace irene
         //==============================================================================
         juce::AudioProcessorValueTreeState& getValueTreeState() noexcept { return apvts; }
         const ParamRefs& getParamRefs() const noexcept { return paramRefs; }
+
+        /** What the engine plays: the parameters plus the browser's "Solo
+            target" mode. Real-time safe. Export uses the bare parameters. */
+        EngineSettings readSettings() const noexcept;
+
+        /** The browser's "Solo target" mode: only the browser's target slot is
+            heard. Not saved; the editor switches it off when it closes. */
+        std::atomic<bool> auditionSolo { false };
         SlotManager& getSlots() noexcept { return slotManager; }
         Engine& getEngine() noexcept { return engine; }
 
@@ -98,6 +106,10 @@ namespace irene
 
         UiState uiState;
 
+        /** Free text notes, saved with the project (not in presets). Any thread. */
+        juce::String getNotes() const;
+        void setNotes (const juce::String&);
+
         //==============================================================================
         IRLibrary& getLibrary() noexcept { return *library; }
 
@@ -136,6 +148,8 @@ namespace irene
         GlobalSettings::Shared globalSettings;
         IRLibrary::Shared library;
         std::array<juce::StringArray, kNumSlots> slotListContexts;
+        mutable juce::CriticalSection notesLock;
+        juce::String notes;
         juce::AudioProcessorValueTreeState apvts;
         ParamRefs paramRefs;
         Engine engine;

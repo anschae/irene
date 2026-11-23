@@ -82,6 +82,11 @@ namespace irene
         FilterBlockSettings outputFilter;
         float outGainDb = 0.0f;
 
+        /** Not a parameter: while the browser's "Solo target" mode is on, the
+            slot being auditioned (-1 = off). Only that slot is heard, even if
+            it is muted, and mute/solo of the other slots are ignored. */
+        int auditionSlot = -1;
+
         bool operator== (const EngineSettings&) const = default;
 
         bool anySolo() const noexcept
@@ -96,6 +101,9 @@ namespace irene
         /** True if the slot is heard, taking mute and solo into account. */
         bool isSlotAudible (int index) const noexcept
         {
+            if (auditionSlot >= 0)
+                return index == auditionSlot;
+
             const auto& s = slots[static_cast<size_t> (index)];
             return ! s.mute && (! anySolo() || s.solo);
         }

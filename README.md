@@ -4,7 +4,7 @@ An impulse-response (IR) loader plugin for guitar cabinet IRs, with three blenda
 
 Formats: **VST3** (macOS, Windows), **AU** (macOS), **Standalone**.
 
-> **Status: version 0.1.0 plus automatic time-alignment.** All features are implemented. The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. The plugin has not yet been tried by a person in Cubase or Logic (see [Known gaps](#known-gaps)).
+> **Status: version 0.2.0.** Version 0.1.0 plus automatic time-alignment and the browser and workflow improvements of step 1 (see [Roadmap](#roadmap)). The builds for macOS (universal VST3, AU, Standalone) and Windows (VST3, Standalone) pass their automated checks, including pluginval and Apple's auval. Version 0.1.0 has been used in Cubase; the step-1 features have not been tried in a DAW yet (see [Known gaps](#known-gaps)).
 
 ## Download
 
@@ -73,6 +73,13 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 8. **Polish**: tooltips, README, thread-safety hardening, release `v0.1.0` ← *done*
 9. **Automatic time-alignment of slots** (added after 0.1.0) ← *done*
 
+Agreed with the owner after 0.1.0, in steps that are each released and tried in a DAW before the next:
+
+10. **Step 1, browser and workflow** (version 0.2.0): favourite-folder display names, right-click menus, resizable browser and columns (remembered), "back to the previous IR" per slot, "Solo target" while browsing, notepad, mono export by default ← *done*
+11. **Step 2, levels and slots:** dry signal when no IR is loaded, auto gain for the slot blend, 5 slots, A/B comparison (loudness-matched), lower CPU on mono tracks
+12. **Step 3, EQ and display:** more EQ bands, draggable EQ points with FabFilter Pro-Q-style mouse and key controls, a band switches on when its gain is changed, waveform view of the slots, "align as heard"
+13. **Step 4, extras:** tags and ratings in the browser, minimum-phase option per slot
+
 ## Design decisions
 
 - **JUCE version:** pinned to `9.0.5`. The spec said JUCE 8, but that line now only receives security patches, while JUCE 9 has the same licence terms and system requirements. The tag is set in one place at the top of `CMakeLists.txt`.
@@ -88,7 +95,7 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 ### User interface
 
 - **Scaling.** The whole window scales between 75 % and 200 %, either from the settings page or by dragging the bottom-right corner. The size is a global setting.
-- **Global settings** (favourite folders, presets folder, loading defaults, UI scale) live in one XML file in IRene's settings folder and are shared by all instances and DAWs: macOS `~/Library/Application Support/IRene/`, Windows `%APPDATA%\IRene\`.
+- **Global settings** (favourite folders and their display names, presets folder, loading defaults, UI scale, browser width and columns) live in one XML file in IRene's settings folder and are shared by all instances and DAWs: macOS `~/Library/Application Support/IRene/`, Windows `%APPDATA%\IRene\`.
 - **Dialogs and menus open inside the plugin window** rather than as separate system windows, because those behave differently from host to host.
 - **Each slot has Norm and Trim buttons** in addition to the controls in the spec, to switch loudness normalisation and auto-trim for the IR in that slot.
 - **The selected filter tab and the browser's target slot** are saved with the project (they are not automatable parameters).
@@ -108,6 +115,24 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 - **Prev/next on a slot** steps through the browser list the IR was picked from. For an IR loaded another way (file dialog, drag from the desktop), it steps through the other IR files in the same folder. Both wrap around.
 - **Scanning** runs on a background thread at low priority. Files whose size and modification time are unchanged are not opened again. Unreadable `.wav`/`.aiff` files are remembered and hidden.
 - **Future-proof file format:** the library file has a version number, and attributes that this version doesn't know (such as tags or ratings written by a later version) are kept when the file is saved.
+
+- **Display names for favourite folders.** Right-click a favourite folder in the browser (or double-click it in Settings) and choose **Rename...** to show it under another name, e.g. "Mesa 4x12" instead of "48". Only IRene's display changes; the folder on disk keeps its name. The name is stored in the global settings with the folder's path and is forgotten when the folder is removed from the list. An empty name, or the folder's own name, means "no custom name". (An older IRene version ignores the names and drops them when it saves its settings.)
+- **Right-click menus.** On a favourite folder: Rename, use the folder's own name, open the folder in Finder/Explorer, rescan. On a file: load it into any slot (not just the target slot), add or remove it as a favourite, show it in Finder/Explorer. On a subfolder: open it in Finder/Explorer. Menus open inside the plugin window like all other menus.
+- **Browser width.** Drag the thin strip between the browser and the frequency display. The window gets wider or narrower; the rest of the layout and the UI scale stay as they are. Double-click the strip for the default width (300 at 100 %). Range 250 to 700.
+- **Columns.** Drag the borders in the list header to change column widths; right-click the header to show or hide Ch, Rate and Length (Name and the star column are always shown). The columns still fill the browser's width: widening one makes the columns to its right narrower, so for long names widen the browser itself.
+- **Browser width and columns are global settings.** Every new plugin window (in any DAW) opens with the width and columns used last. A window that is already open keeps its own layout until it is closed, so that changing one instance never resizes another.
+- **"Solo target"** (button at the bottom of the browser). While it is on, only the browser's target slot is heard, even if that slot is muted, so you can judge the IR you are auditioning on its own; the other slots are dimmed and marked "Not heard". It follows the target slot when you click another slot. It is not a parameter and isn't saved: it turns off when the plugin window closes or the browser is hidden, so the plugin never plays a single slot with nothing on screen to show it. The frequency display shows what you hear; "Export as single IR" ignores it.
+
+### Back to the previous IR
+
+- **The ↶ button on each slot** (left of < and >) puts back the IR that was in the slot before. Click it again to go further back. It undoes loading a file (from the browser, prev/next, drag and drop, the file dialog or the right-click menu) and **Clear**. Going back far enough empties the slot again if it started empty.
+- **The IR comes back with the Norm and Trim settings it had.** Knob settings are not part of the history (use the DAW's undo for those).
+- **Up to 25 steps per slot.** Loading the IR that is already in the slot, or a file that fails to load, adds no step. **Swap** moves the history along with the IR.
+- **The history belongs to the open plugin, not to the project.** It is not saved; loading a project, a preset or "Init" starts a fresh history.
+
+### Notes
+
+- **Notes button** (top right): a notepad for free text about the sound, e.g. which cab and mics or what it's used for. The text is saved with the DAW project as you type. Presets don't store it, and loading a preset keeps the project's notes. The button shows a dot when there are notes.
 
 ### Automatic time-alignment (the Align button)
 
@@ -140,6 +165,7 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 - **Auto length** ends the IR where the tail has dropped 90 dB below the peak, looking at up to 3 seconds beyond the longest IR (filters ring on), at most 12 seconds in total. A 5 ms fade-out is always applied.
 - **24-bit files and overs:** if the IR peaks above 0 dBFS, a 24-bit export is refused with a message rather than written clipped. Use peak normalisation or 32-bit float.
 - **Cancel** stops the render; nothing is written. Files are written via a temporary file.
+- **Mono by default.** A new plugin instance exports mono (most guitar IR loaders expect mono IRs). Choose Stereo in the panel to keep left and right separate.
 - **Export options** are remembered per plugin instance while it is open, not saved with the project.
 
 ### Presets
@@ -175,10 +201,11 @@ To change the version number shown in the plugin, edit `IRENE_VERSION` at the to
 
 ## Known gaps
 
-- **Not yet tried in Cubase or Logic.** The automated checks (unit tests on all three platforms, pluginval at strictness 10, auval) pass, but nobody has used the plugin in a DAW yet. In particular, keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host.
+- **Step-1 features not yet tried in a DAW.** Version 0.1.0 works in Cubase. The new right-click menus, dragging the browser's edge (the plugin resizes its own window while you drag, which hosts handle slightly differently), "Open in Finder/Explorer", and the Notes text field (keyboard focus in the host) need trying in Cubase and Logic.
+- **Still to try from 0.1.0:** keyboard focus for arrow-key auditioning, drag and drop from Finder/Explorer, and the file dialogs depend on the host; they haven't been reported as a problem in Cubase.
 - **Time-alignment has only been tested with synthetic IRs.** The maths is verified, but how well it judges real microphones (the 20 % match threshold in particular) needs trying with real multi-mic IR packs.
-- **Draggable EQ handles on the display** (a stretch goal) are not implemented.
-- **CPU:** the engine always processes in stereo, also for a mono source with mono IRs.
+- **Draggable EQ handles on the display** are not implemented yet (planned for step 3).
+- **CPU:** the engine always processes in stereo, also for a mono source with mono IRs (planned for step 2).
 
 ## For developers
 

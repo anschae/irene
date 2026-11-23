@@ -50,6 +50,15 @@ namespace irene::ui
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
     };
 
+    /** A small button showing a "go back" arrow (drawn, so it doesn't depend
+        on which symbols the system font has). */
+    class BackButton final : public juce::TextButton
+    {
+    public:
+        BackButton() = default;
+        void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+    };
+
     /** A simple in-window dialog: a question with two buttons, a message with
         one, or a prompt with a text field and an optional checkbox. Covers its
         parent while visible. Used instead of native dialogs, which behave

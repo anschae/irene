@@ -156,6 +156,7 @@ namespace
 
                 // Export everything the plugin does (filters and output gain included), stereo, session rate
                 ExportOptions options;
+                options.stereo = true; // the default is mono
                 options.includeOutputGain = true;
 
                 auto error = equivalenceErrorDb (processor, options, stereo, 48000.0);
@@ -200,6 +201,7 @@ namespace
 
                 // Default: output gain NOT included -> the plugin (at -4 dB) is quieter by exactly that
                 ExportOptions options;
+                options.stereo = true; // the default is mono
                 expect (! options.includeOutputGain && options.includeInputOutputFilters);
                 const auto gain = juce::Decibels::decibelsToGain (-4.0f);
                 auto error = equivalenceErrorDb (processor, options, stereo, 48000.0, 1.0f / gain);
@@ -232,6 +234,7 @@ namespace
 
                 // Session rate by default
                 ExportOptions options;
+                options.stereo = true; // the default is mono; this test looks at both channels
                 auto reference = renderExport (ExportSnapshot::capture (processor), options);
                 expect (reference.succeeded());
                 expectEquals (reference.sampleRate, 48000.0);
@@ -317,6 +320,7 @@ namespace
                 const auto snapshot = ExportSnapshot::capture (processor);
 
                 ExportOptions options;
+                options.stereo = true; // the default is mono
                 options.normalisePeak = true;
                 const auto rendered = renderExport (snapshot, options);
 
@@ -388,7 +392,7 @@ namespace
 
                 const auto options = panel->readOptions();
                 expect (options.includeInputOutputFilters && ! options.includeOutputGain); // the specified defaults
-                expect (options.stereo && options.autoLength && ! options.normalisePeak);
+                expect (! options.stereo && options.autoLength && ! options.normalisePeak); // mono by default
                 expectEquals (options.bitDepth, 24);
                 expectEquals (options.sampleRate, 0.0);
 

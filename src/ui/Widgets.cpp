@@ -224,4 +224,29 @@ namespace irene::ui
         g.setFont (font (14.0f));
         g.drawFittedText (message, area, juce::Justification::topLeft, 4);
     }
+
+    //==============================================================================
+    void BackButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+    {
+        getLookAndFeel().drawButtonBackground (g, *this, findColour (juce::TextButton::buttonColourId), highlighted, down);
+
+        // An arrow that curves back to the left.
+        const auto area = getLocalBounds().toFloat().reduced (getWidth() * 0.27f, getHeight() * 0.3f);
+        juce::Path arc;
+        arc.addCentredArc (area.getCentreX(), area.getBottom() - area.getHeight() * 0.5f,
+                           area.getWidth() * 0.45f, area.getHeight() * 0.45f, 0.0f,
+                           juce::MathConstants<float>::pi * 1.55f, juce::MathConstants<float>::pi * 2.5f, true);
+
+        const auto colour = isEnabled() ? colours::text : colours::textDim.withAlpha (0.5f);
+        g.setColour (colour);
+        g.strokePath (arc, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // arrow head at the start of the arc (left side)
+        const auto start = arc.getPointAlongPath (0.0f);
+        const auto size = area.getHeight() * 0.42f;
+        juce::Path head;
+        head.addTriangle (start.x - size * 0.6f, start.y, start.x + size * 0.45f, start.y - size * 0.55f,
+                          start.x + size * 0.45f, start.y + size * 0.55f);
+        g.fillPath (head);
+    }
 }

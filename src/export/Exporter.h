@@ -19,7 +19,7 @@ namespace irene
     {
         bool includeInputOutputFilters = true; // the input and output filter blocks
         bool includeOutputGain = false;
-        bool stereo = true;          // false: mono, as the plugin sounds on a mono track
+        bool stereo = false;         // false: mono, as the plugin sounds on a mono track (the default)
         double sampleRate = 0.0;     // 0 = session rate
         int bitDepth = 24;           // 24 (integer) or 32 (float)
         bool autoLength = true;      // until the tail has dropped 90 dB below the peak

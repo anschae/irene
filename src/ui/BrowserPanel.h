@@ -17,17 +17,49 @@ namespace irene::ui
         is virtualised, so it stays fast with thousands of files. */
     class BrowserPanel final : public juce::Component,
                                private juce::TableListBoxModel,
+                               private juce::TableHeaderComponent::Listener,
                                private Broadcaster::Listener,
                                private juce::Timer
     {
     public:
-        explicit BrowserPanel (IReneProcessor&);
+        BrowserPanel (IReneProcessor&, ConfirmOverlay&);
         ~BrowserPanel() override;
 
         /** A file was chosen for the target slot. `listContext` is the list it
             came from (full paths, in display order), used for prev/next. */
         std::function<void (const juce::File& file, const juce::StringArray& listContext)> onFileChosen;
+
+        /** "Load into Slot n" from the right-click menu. */
+        std::function<void (int slot, const juce::File& file, const juce::StringArray& listContext)> onLoadIntoSlot;
+
         std::function<void()> onOpenSettings;
+
+        /** The "Solo target" button was switched (the processor flag is already set). */
+        std::function<void()> onAuditionSoloChanged;
+
+        /** Updates the "Solo target" button from the processor's flag. */
+        void syncAuditionSolo();
+
+        /** Right-click menus, exposed for tests: the menu for a favourite folder
+            in the locations list, and for a row of the file list. */
+        juce::PopupMenu createFolderMenu (const juce::String& favouriteFolder);
+        juce::PopupMenu createRowMenu (int row);
+        void handleFolderMenuResult (const juce::String& favouriteFolder, int result);
+        void handleRowMenuResult (int row, int result);
+
+        enum MenuItem
+        {
+            renameFolderItem = 1,
+            resetFolderNameItem,
+            openFolderItem,
+            revealItem,
+            rescanItem,
+            toggleFavouriteItem,
+            loadIntoSlotItem = 100 // + slot index
+        };
+
+        juce::TableHeaderComponent& getHeaderForTests() noexcept { return table.getHeader(); }
+        juce::String getLocationLabel (int row) const;
 
         /** Full paths of the files in the current view, in display order. */
         juce::StringArray getCurrentFileList() const;
@@ -89,6 +121,16 @@ namespace irene::ui
         void broadcasterChanged (Broadcaster*) override;
         void timerCallback() override;
 
+        // juce::TableHeaderComponent::Listener
+        void tableColumnsChanged (juce::TableHeaderComponent*) override;
+        void tableColumnsResized (juce::TableHeaderComponent*) override;
+        void tableSortOrderChanged (juce::TableHeaderComponent*) override {}
+
+        void showFolderMenu (const juce::String& favouriteFolder);
+        void showRowMenu (int row);
+        void renameFolder (const juce::String& favouriteFolder);
+        void saveColumnLayout();
+
         using BrowserState = IReneProcessor::BrowserState;
 
         void rebuild();
@@ -100,8 +142,11 @@ namespace irene::ui
         juce::String currentFolderLabel() const;
 
         IReneProcessor& processor;
+        ConfirmOverlay& confirm;
         IRLibrary& library;
+        GlobalSettings& settings;
         BrowserState& state;
+        bool restoringColumns = false, columnsDirty = false;
 
         std::vector<Row> rows;
         juce::StringArray folders;
@@ -110,7 +155,7 @@ namespace irene::ui
         juce::Label heading, pathLabel, status, emptyHint;
         juce::ListBox locationList;
         juce::TextButton upButton { "Up" }, subfoldersButton { "Subfolders" }, starredButton { juce::String::fromUTF8 ("\xe2\x98\x85 only") };
-        juce::TextButton rescanButton { "Rescan" }, settingsButton { "Add folders..." };
+        juce::TextButton rescanButton { "Rescan" }, settingsButton { "Add folders..." }, soloButton { "Solo target" };
         juce::TextEditor search;
         FileTable table { "IR files", this };
         int scanAnimation = 0;

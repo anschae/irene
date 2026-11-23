@@ -9,6 +9,14 @@ namespace irene::ui
         constexpr int kNumFixedLocations = 2; // "All favourites", "Recent"
         const juce::String kStar = juce::String::fromUTF8 ("\xe2\x98\x85");
         const juce::String kStarOutline = juce::String::fromUTF8 ("\xe2\x98\x86");
+
+       #if JUCE_MAC
+        const juce::String kFileManager { "Finder" };
+       #elif JUCE_WINDOWS
+        const juce::String kFileManager { "Explorer" };
+       #else
+        const juce::String kFileManager { "the file manager" };
+       #endif
     }
 
     //==============================================================================
@@ -38,7 +46,7 @@ namespace irene::ui
         else if (row - kNumFixedLocations < owner.folders.size())
         {
             const auto path = owner.folders[row - kNumFixedLocations];
-            text = juce::File::isAbsolutePath (path) ? juce::File (path).getFileName() : path;
+            text = owner.getLocationLabel (row);
             active = s.location == Location::folder && s.rootFolder == path;
         }
 
@@ -53,9 +61,17 @@ namespace irene::ui
         g.drawText (text, 8, 0, width - 12, height, juce::Justification::centredLeft);
     }
 
-    void BrowserPanel::Locations::listBoxItemClicked (int row, const juce::MouseEvent&)
+    void BrowserPanel::Locations::listBoxItemClicked (int row, const juce::MouseEvent& e)
     {
         using Location = BrowserState::Location;
+
+        if (e.mods.isPopupMenu())
+        {
+            if (row >= kNumFixedLocations && row - kNumFixedLocations < owner.folders.size())
+                owner.showFolderMenu (owner.folders[row - kNumFixedLocations]);
+
+            return;
+        }
 
         if (row == 0)
             owner.selectLocation (Location::allFavourites);
@@ -83,8 +99,8 @@ namespace irene::ui
     }
 
     //==============================================================================
-    BrowserPanel::BrowserPanel (IReneProcessor& p)
-        : processor (p), library (p.getLibrary()), state (p.browserState)
+    BrowserPanel::BrowserPanel (IReneProcessor& p, ConfirmOverlay& c)
+        : processor (p), confirm (c), library (p.getLibrary()), settings (p.getGlobalSettings()), state (p.browserState)
     {
         heading.setText ("IR BROWSER", juce::dontSendNotification);
         heading.setFont (font (12.0f, true));
@@ -94,7 +110,7 @@ namespace irene::ui
         locationList.setModel (&locationsModel);
         locationList.setRowHeight (22);
         locationList.setColour (juce::ListBox::backgroundColourId, colours::background);
-        locationList.setTooltip ("Favourite folders are set up in Settings");
+        locationList.setTooltip ("Favourite folders are set up in Settings. Right-click a folder to rename it or open it in " + kFileManager + ".");
         addAndMakeVisible (locationList);
 
         styleCaption (pathLabel, 12.0f, colours::text, juce::Justification::centredLeft);
@@ -140,14 +156,30 @@ namespace irene::ui
         search.onReturnKey = [this] { table.grabKeyboardFocus(); };
         addAndMakeVisible (search);
 
+        // Columns can be resized by dragging their borders; Ch, Rate and Length
+        // can be hidden by right-clicking the header. The layout is a global
+        // setting, so every new instance shows the browser the same way.
+        using Flags = juce::TableHeaderComponent::ColumnPropertyFlags;
         auto& header = table.getHeader();
-        header.addColumn (kStar, starColumn, 24, 24, 24, juce::TableHeaderComponent::notResizableOrSortable);
-        header.addColumn ("Name", nameColumn, 150, 60, -1, juce::TableHeaderComponent::notResizable | juce::TableHeaderComponent::sortable | juce::TableHeaderComponent::visible);
-        header.addColumn ("Ch", channelsColumn, 30, 30, 30, juce::TableHeaderComponent::notResizableOrSortable);
-        header.addColumn ("Rate", rateColumn, 42, 42, 42, juce::TableHeaderComponent::notResizableOrSortable);
-        header.addColumn ("Length", lengthColumn, 54, 54, 54, juce::TableHeaderComponent::notResizableOrSortable);
+        header.addColumn (kStar, starColumn, 24, 24, 24, Flags::visible);
+        header.addColumn ("Name", nameColumn, 150, 60, -1, Flags::visible | Flags::resizable | Flags::sortable);
+        header.addColumn ("Ch", channelsColumn, 30, 24, 70, Flags::visible | Flags::resizable | Flags::appearsOnColumnMenu);
+        header.addColumn ("Rate", rateColumn, 42, 34, 90, Flags::visible | Flags::resizable | Flags::appearsOnColumnMenu);
+        header.addColumn ("Length", lengthColumn, 54, 40, 110, Flags::visible | Flags::resizable | Flags::appearsOnColumnMenu);
         header.setStretchToFitActive (true);
+
+        if (const auto saved = settings.get().browserColumns; saved.isNotEmpty())
+        {
+            const juce::ScopedValueSetter<bool> restoring (restoringColumns, true);
+            header.restoreFromString (saved);
+
+            // never lose the name column, whatever the file says
+            header.setColumnVisible (starColumn, true);
+            header.setColumnVisible (nameColumn, true);
+        }
+
         header.setSortColumnId (nameColumn, state.sortForwards);
+        header.addListener (this);
         header.setColour (juce::TableHeaderComponent::backgroundColourId, colours::panelRaised);
         header.setColour (juce::TableHeaderComponent::textColourId, colours::textDim);
         header.setColour (juce::TableHeaderComponent::outlineColourId, colours::outline);
@@ -165,11 +197,26 @@ namespace irene::ui
         addAndMakeVisible (table);
 
         styleCaption (status, 11.0f, colours::textDim, juce::Justification::centredLeft);
+        status.setMinimumHorizontalScale (0.7f);
         addAndMakeVisible (status);
 
         rescanButton.setTooltip ("Look for new, changed and removed files in the favourite folders");
         rescanButton.onClick = [this] { library.rescan(); };
         addAndMakeVisible (rescanButton);
+
+        soloButton.setClickingTogglesState (true);
+        soloButton.setColour (juce::TextButton::buttonOnColourId, colours::solo);
+        soloButton.setColour (juce::TextButton::textColourOnId, colours::background);
+        soloButton.setTooltip ("While on, only the browser's target slot is heard, so you can judge the IR you are auditioning on its own. "
+                               "Switch it off to hear the whole blend again. Turns off when the plugin window closes.");
+        soloButton.onClick = [this]
+        {
+            processor.auditionSolo = soloButton.getToggleState();
+
+            if (onAuditionSoloChanged)
+                onAuditionSoloChanged();
+        };
+        addAndMakeVisible (soloButton);
 
         emptyHint.setFont (font (13.0f));
         emptyHint.setColour (juce::Label::textColourId, colours::textDim);
@@ -182,8 +229,10 @@ namespace irene::ui
         addChildComponent (settingsButton);
 
         library.addListener (this);
+        settings.addListener (this); // folder display names
         processor.getSlots().addListener (this);
         startTimerHz (4);
+        syncAuditionSolo();
 
         // First visit: start in the first favourite folder, if there is one.
         folders = library.getFolders();
@@ -206,7 +255,10 @@ namespace irene::ui
 
     BrowserPanel::~BrowserPanel()
     {
+        saveColumnLayout();
+        table.getHeader().removeListener (this);
         processor.getSlots().removeListener (this);
+        settings.removeListener (this);
         library.removeListener (this);
         locationList.setModel (nullptr);
         table.setModel (nullptr);
@@ -241,6 +293,222 @@ namespace irene::ui
     {
         ++scanAnimation;
         updateStatus();
+
+        // Store the column layout once the user has finished changing it.
+        if (columnsDirty && ! table.getHeader().isMouseButtonDown (true))
+            saveColumnLayout();
+    }
+
+    void BrowserPanel::tableColumnsChanged (juce::TableHeaderComponent*)
+    {
+        // shown/hidden from the header's right-click menu
+        if (! restoringColumns)
+            columnsDirty = true;
+    }
+
+    void BrowserPanel::tableColumnsResized (juce::TableHeaderComponent* header)
+    {
+        // Only the user's own drags count. Resizing that follows from the
+        // browser's width (stretch to fit) is not a new layout.
+        if (! restoringColumns && header != nullptr && header->isMouseButtonDown (true))
+            columnsDirty = true;
+    }
+
+    void BrowserPanel::saveColumnLayout()
+    {
+        if (! columnsDirty)
+            return;
+
+        columnsDirty = false;
+        const auto layout = table.getHeader().toString();
+        settings.update ([&layout] (auto& d) { d.browserColumns = layout; });
+    }
+
+    void BrowserPanel::syncAuditionSolo()
+    {
+        soloButton.setToggleState (processor.auditionSolo.load(), juce::dontSendNotification);
+    }
+
+    juce::String BrowserPanel::getLocationLabel (int row) const
+    {
+        if (row == 0)
+            return kStar + "  All favourites";
+
+        if (row == 1)
+            return "Recent";
+
+        const auto index = row - kNumFixedLocations;
+        return juce::isPositiveAndBelow (index, folders.size()) ? settings.get().folderDisplayName (folders[index]) : juce::String();
+    }
+
+    //==============================================================================
+    juce::PopupMenu BrowserPanel::createFolderMenu (const juce::String& path)
+    {
+        juce::PopupMenu menu;
+        const auto d = settings.get();
+        const auto hasCustomName = d.folderNames.count (path) > 0;
+        const auto exists = juce::File::isAbsolutePath (path) && juce::File (path).isDirectory();
+
+        menu.addSectionHeader (d.folderDisplayName (path));
+        menu.addItem (renameFolderItem, "Rename...");
+        menu.addItem (resetFolderNameItem, "Use the folder's own name (" + juce::File (path).getFileName() + ")", hasCustomName);
+        menu.addSeparator();
+        menu.addItem (openFolderItem, "Open in " + kFileManager, exists);
+        menu.addItem (rescanItem, "Rescan all favourite folders");
+        return menu;
+    }
+
+    void BrowserPanel::handleFolderMenuResult (const juce::String& path, int result)
+    {
+        switch (result)
+        {
+            case renameFolderItem:
+                renameFolder (path);
+                break;
+
+            case resetFolderNameItem:
+                settings.update ([&path] (auto& d) { d.folderNames.erase (path); });
+                break;
+
+            case openFolderItem:
+                if (juce::File::isAbsolutePath (path) && juce::File (path).isDirectory())
+                    juce::File (path).startAsProcess();
+                break;
+
+            case rescanItem:
+                library.rescan();
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    void BrowserPanel::showFolderMenu (const juce::String& path)
+    {
+        auto menu = createFolderMenu (path);
+        menu.setLookAndFeel (&getLookAndFeel());
+        juce::Component::SafePointer<BrowserPanel> safe (this);
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+                            [safe, path] (int result)
+                            {
+                                if (safe != nullptr && result > 0)
+                                    safe->handleFolderMenuResult (path, result);
+                            });
+    }
+
+    void BrowserPanel::renameFolder (const juce::String& path)
+    {
+        const auto ownName = juce::File::isAbsolutePath (path) ? juce::File (path).getFileName() : path;
+        juce::Component::SafePointer<BrowserPanel> safe (this);
+
+        confirm.prompt ("Rename favourite folder",
+                        "The name shown in IRene for\n" + path + "\nThe folder itself is not renamed. Leave the field empty to show the folder's own name.",
+                        settings.get().folderDisplayName (path), {}, false, "Rename",
+                        [safe, path, ownName] (bool confirmed, const juce::String& text, bool)
+                        {
+                            if (safe == nullptr || ! confirmed)
+                                return;
+
+                            const auto name = text.trim();
+
+                            safe->settings.update ([&] (auto& d)
+                            {
+                                if (name.isEmpty() || name == ownName)
+                                    d.folderNames.erase (path);
+                                else
+                                    d.folderNames[path] = name;
+                            });
+                        });
+    }
+
+    juce::PopupMenu BrowserPanel::createRowMenu (int row)
+    {
+        juce::PopupMenu menu;
+
+        if (! juce::isPositiveAndBelow (row, static_cast<int> (rows.size())))
+            return menu;
+
+        const auto& r = rows[static_cast<size_t> (row)];
+        const juce::File file (r.path);
+
+        if (r.isFolder)
+        {
+            menu.addItem (openFolderItem, "Open in " + kFileManager, file.isDirectory());
+            return menu;
+        }
+
+        const auto target = processor.uiState.targetSlot.load();
+
+        for (int i = 0; i < kNumSlots; ++i)
+            menu.addItem (loadIntoSlotItem + i, "Load into Slot " + juce::String (i + 1) + (i == target ? "  (target)" : ""));
+
+        menu.addSeparator();
+        menu.addItem (toggleFavouriteItem, r.favourite ? "Remove from favourites" : "Add to favourites");
+        menu.addItem (revealItem, "Show in " + kFileManager, file.existsAsFile());
+        return menu;
+    }
+
+    void BrowserPanel::handleRowMenuResult (int row, int result)
+    {
+        if (! juce::isPositiveAndBelow (row, static_cast<int> (rows.size())))
+            return;
+
+        const auto r = rows[static_cast<size_t> (row)]; // copy: the actions may rebuild the list
+        const juce::File file (r.path);
+
+        if (result >= loadIntoSlotItem && result < loadIntoSlotItem + kNumSlots)
+        {
+            if (onLoadIntoSlot != nullptr && ! r.isFolder)
+                onLoadIntoSlot (result - loadIntoSlotItem, file, getCurrentFileList());
+
+            return;
+        }
+
+        switch (result)
+        {
+            case openFolderItem:
+                if (file.isDirectory())
+                    file.startAsProcess();
+                break;
+
+            case revealItem:
+                if (file.existsAsFile())
+                    file.revealToUser();
+                break;
+
+            case toggleFavouriteItem:
+                toggleFavourite (row);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    void BrowserPanel::showRowMenu (int row)
+    {
+        auto menu = createRowMenu (row);
+
+        if (menu.getNumItems() == 0)
+            return;
+
+        menu.setLookAndFeel (&getLookAndFeel());
+        const auto path = rows[static_cast<size_t> (row)].path;
+        juce::Component::SafePointer<BrowserPanel> safe (this);
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+                            [safe, path] (int result)
+                            {
+                                if (safe == nullptr || result <= 0)
+                                    return;
+
+                                // the list may have changed while the menu was open
+                                for (size_t i = 0; i < safe->rows.size(); ++i)
+                                    if (safe->rows[i].path == path)
+                                        return safe->handleRowMenuResult (static_cast<int> (i), result);
+                            });
     }
 
     void BrowserPanel::updateStatus()
@@ -274,7 +542,7 @@ namespace irene::ui
             return {};
 
         const juce::File root (state.rootFolder);
-        auto label = root.getFileName();
+        auto label = settings.get().folderDisplayName (state.rootFolder);
 
         if (state.currentFolder != state.rootFolder && juce::File::isAbsolutePath (state.currentFolder))
             label << " / " << juce::File (state.currentFolder).getRelativePathFrom (root).replaceCharacter ('\\', '/').replace ("/", " / ");
@@ -490,7 +758,8 @@ namespace irene::ui
         entry.sampleRate = r.sampleRate;
         entry.lengthSamples = static_cast<juce::int64> (r.seconds * r.sampleRate);
 
-        library.setFavourite (entry, ! r.favourite); // triggers a rebuild via the change message
+        // Ask the library rather than the row: the row is only refreshed later.
+        library.setFavourite (entry, ! library.isFavourite (entry.hash)); // triggers a rebuild via the change message
     }
 
     //==============================================================================
@@ -577,7 +846,10 @@ namespace irene::ui
     void BrowserPanel::cellClicked (int row, int column, const juce::MouseEvent& e)
     {
         if (e.mods.isPopupMenu())
+        {
+            showRowMenu (row);
             return;
+        }
 
         if (column == starColumn)
             toggleFavourite (row);
@@ -620,7 +892,7 @@ namespace irene::ui
         if (column == starColumn && ! rows[static_cast<size_t> (row)].isFolder)
             return "Click to add or remove this IR as a favourite";
 
-        return rows[static_cast<size_t> (row)].path;
+        return rows[static_cast<size_t> (row)].path + "\n(right-click for more)";
     }
 
     //==============================================================================
@@ -659,6 +931,8 @@ namespace irene::ui
 
         auto bottom = area.removeFromBottom (22);
         rescanButton.setBounds (bottom.removeFromRight (62));
+        bottom.removeFromRight (4);
+        soloButton.setBounds (bottom.removeFromRight (80));
         bottom.removeFromRight (6);
         status.setBounds (bottom);
         area.removeFromBottom (4);

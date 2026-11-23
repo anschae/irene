@@ -254,7 +254,93 @@ namespace irene
     void SlotManager::clear (int slot)
     {
         ++requestIds[static_cast<size_t> (slot)];
+        pushHistory (slot, {});
         resetSlot (slot, SlotInfo::Status::empty, {});
+    }
+
+    //==============================================================================
+    void SlotManager::pushHistory (int slot, const juce::File& incoming)
+    {
+        const juce::ScopedLock state (stateLock);
+        const auto& s = slots[static_cast<size_t> (slot)];
+        auto& h = history[static_cast<size_t> (slot)];
+
+        // Only real IRs and empty slots are worth returning to ("missing" isn't),
+        // and loading the file that is already in the slot changes nothing.
+        if (s.status == SlotInfo::Status::missing)
+            return;
+
+        if (s.status == SlotInfo::Status::ready && incoming != juce::File() && incoming.getFullPathName() == s.reference.path)
+            return;
+
+        if (s.status == SlotInfo::Status::empty && incoming == juce::File())
+            return; // clearing an empty slot
+
+        HistoryEntry entry;
+        entry.source = s.status == SlotInfo::Status::ready ? s.source : nullptr;
+        entry.normalise = s.normalise;
+        entry.autoTrim = s.autoTrim;
+
+        // don't stack two identical entries
+        if (! h.empty() && h.back().source == entry.source
+            && h.back().normalise == entry.normalise && h.back().autoTrim == entry.autoTrim)
+            return;
+
+        h.push_back (std::move (entry));
+
+        if (static_cast<int> (h.size()) > kMaxHistory)
+            h.erase (h.begin());
+    }
+
+    IRReference SlotManager::goBack (int slot)
+    {
+        const auto index = static_cast<size_t> (slot);
+        Job job;
+
+        {
+            const juce::ScopedLock state (stateLock);
+            auto& h = history[index];
+
+            if (h.empty())
+                return {};
+
+            job.entry = std::move (h.back());
+            h.pop_back();
+        }
+
+        job.slot = slot;
+        job.restore = true;
+        job.requestId = ++requestIds[index]; // supersedes any load still in progress
+
+        const auto reference = job.entry.source != nullptr ? job.entry.source->reference : IRReference {};
+
+        ++pendingLoads[index];
+        ++totalPending;
+
+        {
+            const juce::ScopedLock lock (jobLock);
+            jobs.push_back (std::move (job));
+        }
+
+        notify();
+        sendChange();
+        return reference;
+    }
+
+    bool SlotManager::canGoBack (int slot) const
+    {
+        const juce::ScopedLock state (stateLock);
+        return ! history[static_cast<size_t> (slot)].empty();
+    }
+
+    void SlotManager::clearHistory (int slot)
+    {
+        {
+            const juce::ScopedLock state (stateLock);
+            history[static_cast<size_t> (slot)].clear();
+        }
+
+        sendChange();
     }
 
     void SlotManager::swap (int slotA, int slotB)
@@ -270,6 +356,7 @@ namespace irene
         {
             const juce::ScopedLock state (stateLock);
             std::swap (slots[static_cast<size_t> (slotA)], slots[static_cast<size_t> (slotB)]);
+            std::swap (history[static_cast<size_t> (slotA)], history[static_cast<size_t> (slotB)]);
         }
 
         rebuild (slotA);
@@ -314,6 +401,7 @@ namespace irene
         info.normalise = s.normalise;
         info.autoTrim = s.autoTrim;
         info.error = s.error;
+        info.historySize = static_cast<int> (history[index].size());
 
         if (s.source != nullptr)
         {
@@ -373,7 +461,17 @@ namespace irene
                 const auto index = static_cast<size_t> (job.slot);
                 const auto isCurrent = [&] { return job.requestId == requestIds[index].load(); };
 
-                if (isCurrent() && ! threadShouldExit())
+                if (job.restore)
+                {
+                    if (isCurrent() && ! threadShouldExit())
+                    {
+                        if (job.entry.source != nullptr)
+                            installSource (job.slot, job.entry.source, job.entry.normalise, job.entry.autoTrim);
+                        else
+                            resetSlot (job.slot, SlotInfo::Status::empty, {});
+                    }
+                }
+                else if (isCurrent() && ! threadShouldExit())
                 {
                     auto result = loadIRFile (job.file);
 
@@ -389,6 +487,7 @@ namespace irene
                                 autoTrim = defaultAutoTrim;
                             }
 
+                            pushHistory (job.slot, job.file);
                             installSource (job.slot, result.source, normalise, autoTrim);
 
                             if (onFileLoaded != nullptr)
@@ -479,6 +578,11 @@ namespace irene
     {
         for (int i = 0; i < kNumSlots; ++i)
         {
+            {
+                const juce::ScopedLock state (stateLock);
+                history[static_cast<size_t> (i)].clear();
+            }
+
             const auto child = tree.getChildWithProperty (kIndex, i);
 
             IRReference ref { child.getProperty (kPath).toString(),
@@ -490,7 +594,8 @@ namespace irene
 
             if (! child.isValid() || child.getProperty (kStatus).toString() == "empty" || ref.isEmpty())
             {
-                clear (i);
+                ++requestIds[static_cast<size_t> (i)];
+                resetSlot (i, SlotInfo::Status::empty, {}); // not clear(): no history entry
                 continue;
             }
 

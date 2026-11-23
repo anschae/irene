@@ -69,7 +69,7 @@ namespace irene::ui
     //==============================================================================
     void ResponseDisplay::timerCallback()
     {
-        const auto settings = processor.getParamRefs().read();
+        const auto settings = processor.readSettings();
         const auto rate = processor.getEngine().isPrepared() ? processor.getEngine().getSampleRate() : 48000.0;
         const auto stereo = processor.getTotalNumOutputChannels() > 1;
 
@@ -110,7 +110,7 @@ namespace irene::ui
 
     const analysis::ResponseCurves& ResponseDisplay::updateNowForTests()
     {
-        lastSettings = processor.getParamRefs().read();
+        lastSettings = processor.readSettings();
         lastRate = processor.getEngine().isPrepared() ? processor.getEngine().getSampleRate() : 48000.0;
         lastStereo = processor.getTotalNumOutputChannels() > 1;
         recompute();

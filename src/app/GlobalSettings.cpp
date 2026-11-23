@@ -17,6 +17,9 @@ namespace irene
         const juce::Identifier kFavouriteFolders { "FavouriteFolders" };
         const juce::Identifier kFolder { "Folder" };
         const juce::Identifier kPath { "path" };
+        const juce::Identifier kName { "name" };
+        const juce::Identifier kBrowserWidth { "browserWidth" };
+        const juce::Identifier kBrowserColumns { "browserColumns" };
 
         juce::File& directoryOverride()
         {
@@ -42,6 +45,14 @@ namespace irene
     void GlobalSettings::setDataDirectoryOverride (const juce::File& directory)
     {
         directoryOverride() = directory;
+    }
+
+    juce::String GlobalSettings::Data::folderDisplayName (const juce::String& path) const
+    {
+        if (const auto it = folderNames.find (path); it != folderNames.end() && it->second.trim().isNotEmpty())
+            return it->second.trim();
+
+        return juce::File::isAbsolutePath (path) ? juce::File (path).getFileName() : path;
     }
 
     //==============================================================================
@@ -72,6 +83,18 @@ namespace irene
             cleaned.uiScale = juce::jlimit (kMinUiScale, kMaxUiScale, cleaned.uiScale);
             cleaned.favouriteFolders.removeEmptyStrings();
             cleaned.favouriteFolders.removeDuplicates (false);
+            cleaned.browserWidth = juce::jlimit (kMinBrowserWidth, kMaxBrowserWidth, cleaned.browserWidth);
+
+            // Names only for folders that are still in the list, and only real ones.
+            for (auto it = cleaned.folderNames.begin(); it != cleaned.folderNames.end();)
+            {
+                it->second = it->second.trim();
+
+                if (! cleaned.favouriteFolders.contains (it->first) || it->second.isEmpty())
+                    it = cleaned.folderNames.erase (it);
+                else
+                    ++it;
+            }
 
             if (cleaned == data)
                 return;
@@ -113,10 +136,22 @@ namespace irene
                 loaded.defaultAutoTrim = tree.getProperty (kDefaultAutoTrim, loaded.defaultAutoTrim);
                 loaded.browserOpen = tree.getProperty (kBrowserOpen, loaded.browserOpen);
                 loaded.presetsFolder = tree.getProperty (kPresetsFolder).toString();
+                loaded.browserWidth = juce::jlimit (kMinBrowserWidth, kMaxBrowserWidth,
+                                                    static_cast<int> (tree.getProperty (kBrowserWidth, loaded.browserWidth)));
+                loaded.browserColumns = tree.getProperty (kBrowserColumns).toString();
 
                 for (const auto& child : tree.getChildWithName (kFavouriteFolders))
-                    if (child.hasType (kFolder) && child.getProperty (kPath).toString().isNotEmpty())
-                        loaded.favouriteFolders.addIfNotAlreadyThere (child.getProperty (kPath).toString());
+                {
+                    const auto path = child.getProperty (kPath).toString();
+
+                    if (! child.hasType (kFolder) || path.isEmpty() || loaded.favouriteFolders.contains (path))
+                        continue;
+
+                    loaded.favouriteFolders.add (path);
+
+                    if (const auto name = child.getProperty (kName).toString().trim(); name.isNotEmpty())
+                        loaded.folderNames[path] = name;
+                }
             }
         }
 
@@ -134,6 +169,10 @@ namespace irene
         tree.setProperty (kDefaultAutoTrim, data.defaultAutoTrim, nullptr);
         tree.setProperty (kBrowserOpen, data.browserOpen, nullptr);
         tree.setProperty (kPresetsFolder, data.presetsFolder, nullptr);
+        tree.setProperty (kBrowserWidth, data.browserWidth, nullptr);
+
+        if (data.browserColumns.isNotEmpty())
+            tree.setProperty (kBrowserColumns, data.browserColumns, nullptr);
 
         juce::ValueTree folders { kFavouriteFolders };
 
@@ -141,6 +180,9 @@ namespace irene
         {
             juce::ValueTree folder { kFolder };
             folder.setProperty (kPath, path, nullptr);
+
+            if (const auto it = data.folderNames.find (path); it != data.folderNames.end())
+                folder.setProperty (kName, it->second, nullptr);
             folders.appendChild (folder, nullptr);
         }
 
